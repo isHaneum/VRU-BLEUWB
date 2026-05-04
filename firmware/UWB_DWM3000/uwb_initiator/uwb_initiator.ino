@@ -5,6 +5,12 @@
  *       Poll 메시지를 전송하고 Responder의 Response를 수신한 뒤
  *       Final 메시지를 전송하여 비행시간(ToF) 기반 거리를 계산한다.
  *
+ * 연구 맥락:
+ *   이 코드는 BLE-triggered UWB Ranging + Cooperative Risk Filtering
+ *   실험 플랫폼의 UWB confirmation layer다.
+ *   BLE pre-trigger로 위험 후보가 식별된 후 UWB burst가 활성화되며,
+ *   측정 결과는 analysis/risk_filter.py의 입력으로 사용된다.
+ *
  * 하드웨어:
  *   - MCU: ESP32-WROOM-32
  *   - UWB Module: Qorvo DWM3000 (DW3000 기반)
@@ -28,7 +34,8 @@
  *   또는 Qorvo 공식 SDK를 Arduino 래핑한 버전
  *
  * Serial 출력 형식:
- *   timestamp_ms,range_m,status
+ *   timestamp_ms,node_id,seq_id,range_m,status
+ *   (rssi_fp_power, rx_quality: TODO — DW3000 library에서 접근 가능하면 추가)
  */
 
 #include <SPI.h>
@@ -56,8 +63,13 @@
 #define UWB_TICK_TO_SEC  (1.0 / (499.2e6 * 128.0))
 #define SPEED_OF_LIGHT   299702547.0  // m/s (공기 중)
 
+// ── Node ID ───────────────────────────────────────────────────────────────────
+// 각 Initiator 노드마다 고유 ID를 지정하라 (예: "node_A", "node_B")
+#define NODE_ID  "node_A"
+
 static uint8_t txBuf[12];
 static uint8_t rxBuf[20];
+static uint32_t seqId = 0;
 
 // ── 유틸: 40비트 타임스탬프 읽기 ────────────────────────────────────────────────
 static uint64_t getTimestamp40(const uint8_t* buf, int offset) {
@@ -76,7 +88,9 @@ static void putTimestamp40(uint8_t* buf, int offset, uint64_t ts) {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("timestamp_ms,range_m,status");
+    // CSV 헤더: rssi_fp_power와 rx_quality는 TODO — thotro 라이브러리에서
+    // DW3000.getReceivePower() / DW3000.getFirstPathPower() 접근 가능 시 추가
+    Serial.println("timestamp_ms,node_id,seq_id,range_m,status");
 
     SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
 
@@ -128,16 +142,28 @@ void loop() {
         if (DW3000.isReceiveFailed() || DW3000.isReceiveTimeout()) break;
     }
 
-    if (!rxOk || rxBuf[0] != MSG_RESPONSE) {
+    // ── BUG FIX: getData() を rxBuf[0] チェックより先に呼ぶ ──────────────────
+    // 修正前 (버그): rxOk 확인 후 rxBuf[0]을 먼저 검사하고 getData() 나중에 호출
+    //   → rxBuf가 비어 있거나 이전 루프 잔존 데이터를 검사하게 되는 버그
+    // 修正後 (수정): rxOk 확인 → getData() → rxBuf[0] 메시지 타입 검사 순서
+    if (!rxOk) {
         DW3000.clearReceiveStatus();
-        Serial.printf("%u,0.000,TIMEOUT\n", millis());
+        Serial.printf("%u,%s,%u,0.000,TIMEOUT\n", millis(), NODE_ID, seqId++);
         delay(50);
         return;
     }
 
+    // getData() 먼저 호출 — rxBuf에 실제 수신 데이터가 채워진 후 타입 검사
     DW3000.getData(rxBuf, 10);
-    uint64_t respRxTs = DW3000.getReceiveTimestamp();
     DW3000.clearReceiveStatus();
+
+    if (rxBuf[0] != MSG_RESPONSE) {
+        Serial.printf("%u,%s,%u,0.000,INVALID_MSG\n", millis(), NODE_ID, seqId++);
+        delay(50);
+        return;
+    }
+
+    uint64_t respRxTs = DW3000.getReceiveTimestamp();
 
     // Responder가 심어 놓은 Rx/Tx 타임스탬프 추출
     uint64_t pollRxTs  = getTimestamp40(rxBuf, 1);
@@ -174,10 +200,12 @@ void loop() {
     double range_m   = tof_sec * SPEED_OF_LIGHT;
 
     // 음수 또는 비정상 값 필터링
+    // TODO: rssi_fp_power = DW3000.getFirstPathPower() (라이브러리 지원 시)
+    // TODO: rx_quality    = DW3000.getReceivePower()   (라이브러리 지원 시)
     if (range_m < 0.0 || range_m > 200.0) {
-        Serial.printf("%u,%.3f,INVALID\n", millis(), range_m);
+        Serial.printf("%u,%s,%u,%.3f,INVALID_RANGE\n", millis(), NODE_ID, seqId++, range_m);
     } else {
-        Serial.printf("%u,%.3f,OK\n", millis(), range_m);
+        Serial.printf("%u,%s,%u,%.3f,OK\n", millis(), NODE_ID, seqId++, range_m);
     }
 
     delay(50);

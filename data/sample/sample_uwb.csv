@@ -1,0 +1,16 @@
+timestamp_ms,node_id,seq_id,range_m,status
+1050,node_A,1,-1.0,TIMEOUT
+1155,node_A,2,12.34,OK
+1260,node_A,3,11.87,OK
+1365,node_A,4,11.20,OK
+1470,node_A,5,10.55,OK
+1575,node_A,6,9.88,OK
+1680,node_A,7,9.10,OK
+1785,node_A,8,8.41,OK
+1890,node_A,9,7.73,OK
+1995,node_A,10,7.02,OK
+2100,node_A,11,6.31,OK
+2205,node_A,12,5.63,OK
+2310,node_A,13,-1.0,TIMEOUT
+2415,node_A,14,4.88,OK
+2520,node_A,15,4.25,OK

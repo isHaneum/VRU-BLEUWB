@@ -1,0 +1,11 @@
+experiment_id,scenario,target,location,time_s,event,note,road_type,lane_count,ego_lane,target_zone,target_motion,occlusion_state,carry_position,risk_label,node_id
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,0.000,START,,Alley,2,1,,,,HELD_IN_HAND,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,0.312,WALL_CORNER,Behind corner,,,,,,CAR_OCCLUDED,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,0.821,MOVE_START,,,,,,,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,1.105,ALLEY_ENTRY,,,,,,,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,1.240,DART_OUT,fast emergence,,,,,,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,1.502,LANE_ENTER,,,,,,,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,1.745,VISIBLE,confirmed LOS,,,,,,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,1.900,DANGER_POINT,closest approach,,,,,,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,2.011,TRUE_DANGER_CASE,,,,,,,,,node_A
+SYNTHETIC_SAMPLE_01,S1 Alley Dart-out,Pedestrian,Narrow Alley,2.450,END,,,,,,,,,node_A

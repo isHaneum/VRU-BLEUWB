@@ -5,14 +5,33 @@ struct SetupView: View {
     @EnvironmentObject var store: ExperimentStore
 
     @State private var experimentId = ""
-    @State private var scenario = "No Obstacle"
+    @State private var scenario = "S1 Alley Dart-out"
     @State private var target = "Pedestrian"
     @State private var location = "Parking Lot"
+    @State private var roadType = "Urban Road"
+    @State private var laneCount = "2"
+    @State private var egoLane = "1"
+    @State private var nodeId = "node_A"
     @State private var memo = ""
 
-    private let scenarios = ["No Obstacle", "Human Occlusion", "Vehicle Occlusion", "Wall / Corner"]
-    private let targets   = ["Pedestrian", "Bicycle"]
-    private let locations = ["Parking Lot", "Narrow Alley"]
+    private let scenarios = [
+        "S1 Alley Dart-out",
+        "S2 Right-turn Conflict",
+        "S3 Four-lane Sidewalk FP",
+        "S4 Lane-splitting Two-wheeler",
+        "S5 Carry Position Degradation",
+        "S6 Cooperative Warning",
+        "No Obstacle",
+        "Human Occlusion",
+        "Vehicle Occlusion",
+        "Wall / Corner"
+    ]
+    private let targets   = ["Pedestrian", "Bicycle", "Motorcycle", "Scooter", "Other"]
+    private let locations = ["Parking Lot", "Narrow Alley", "Crosswalk", "Intersection", "Campus Road"]
+    private let roadTypes = ["Urban Road", "4-lane Road", "Alley", "Parking Lot", "Campus"]
+    private let laneCounts = ["1", "2", "4", "6"]
+    private let egoLanes  = ["1", "2", "3", "4"]
+    private let nodeIds   = ["node_A", "node_B", "node_C"]
 
     private var canStart: Bool {
         !experimentId.trimmingCharacters(in: .whitespaces).isEmpty
@@ -29,7 +48,7 @@ struct SetupView: View {
 
                 // ── Experiment ID ──────────────────────────────────────────
                 fieldGroup("Experiment ID") {
-                    TextField("e.g. vehicle_occlusion_01", text: $experimentId)
+                    TextField("e.g. alley_dartout_01", text: $experimentId)
                         .textFieldStyle(.roundedBorder)
                         .foregroundColor(.black)
                         .autocorrectionDisabled()
@@ -49,21 +68,47 @@ struct SetupView: View {
 
                 // ── Target ─────────────────────────────────────────────────
                 fieldGroup("Target") {
+                    compactGrid(targets, selected: $target)
+                }
+
+                // ── Location ───────────────────────────────────────────────
+                fieldGroup("Location") {
+                    compactGrid(locations, selected: $location)
+                }
+
+                // ── Road Type ──────────────────────────────────────────────
+                fieldGroup("Road Type") {
+                    compactGrid(roadTypes, selected: $roadType)
+                }
+
+                // ── Lane Count ─────────────────────────────────────────────
+                fieldGroup("Lane Count") {
                     HStack(spacing: 8) {
-                        ForEach(targets, id: \.self) { t in
-                            SelectionButton(label: t, isSelected: target == t) {
-                                target = t
+                        ForEach(laneCounts, id: \.self) { l in
+                            SelectionButton(label: l, isSelected: laneCount == l) {
+                                laneCount = l
                             }
                         }
                     }
                 }
 
-                // ── Location ───────────────────────────────────────────────
-                fieldGroup("Location") {
+                // ── Ego Lane ───────────────────────────────────────────────
+                fieldGroup("Ego Lane (vehicle lane position)") {
                     HStack(spacing: 8) {
-                        ForEach(locations, id: \.self) { l in
-                            SelectionButton(label: l, isSelected: location == l) {
-                                location = l
+                        ForEach(egoLanes, id: \.self) { l in
+                            SelectionButton(label: l, isSelected: egoLane == l) {
+                                egoLane = l
+                            }
+                        }
+                    }
+                }
+
+                // ── Node ID ────────────────────────────────────────────────
+                fieldGroup("Logger Node ID") {
+                    HStack(spacing: 8) {
+                        ForEach(nodeIds, id: \.self) { n in
+                            SelectionButton(label: n, isSelected: nodeId == n) {
+                                nodeId = n
                             }
                         }
                     }
@@ -102,8 +147,24 @@ struct SetupView: View {
             scenario: scenario,
             target: target,
             location: location,
-            memo: memo
+            memo: memo,
+            roadType: roadType,
+            laneCount: laneCount,
+            egoLane: egoLane,
+            nodeId: nodeId
         )
+    }
+
+    @ViewBuilder
+    private func compactGrid(_ options: [String], selected: Binding<String>) -> some View {
+        let columns = [GridItem(.flexible()), GridItem(.flexible())]
+        LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(options, id: \.self) { opt in
+                SelectionButton(label: opt, isSelected: selected.wrappedValue == opt) {
+                    selected.wrappedValue = opt
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -140,3 +201,4 @@ private struct SelectionButton: View {
         }
     }
 }
+

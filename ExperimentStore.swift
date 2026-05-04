@@ -13,7 +13,11 @@ class ExperimentStore: ObservableObject {
         scenario: String,
         target: String,
         location: String,
-        memo: String
+        memo: String,
+        roadType: String = "",
+        laneCount: String = "",
+        egoLane: String = "",
+        nodeId: String = ""
     ) {
         let startTime = Date()
         let startEvent = EventLog(
@@ -23,7 +27,11 @@ class ExperimentStore: ObservableObject {
             location: location,
             timeS: 0.0,
             event: "START",
-            note: ""
+            note: "",
+            roadType: roadType,
+            laneCount: laneCount,
+            egoLane: egoLane,
+            nodeId: nodeId
         )
         session = ExperimentSession(
             experimentId: experimentId,
@@ -31,6 +39,10 @@ class ExperimentStore: ObservableObject {
             target: target,
             location: location,
             memo: memo,
+            roadType: roadType,
+            laneCount: laneCount,
+            egoLane: egoLane,
+            nodeId: nodeId,
             startTime: startTime,
             events: [startEvent]
         )
@@ -47,7 +59,11 @@ class ExperimentStore: ObservableObject {
             location: s.location,
             timeS: elapsed,
             event: code,
-            note: note
+            note: note,
+            roadType: s.roadType,
+            laneCount: s.laneCount,
+            egoLane: s.egoLane,
+            nodeId: s.nodeId
         )
         s.events.append(event)
         session = s
@@ -78,7 +94,7 @@ class ExperimentStore: ObservableObject {
 
     func generateCSV() -> String {
         guard let s = session else { return "" }
-        var lines = ["experiment_id,scenario,target,location,time_s,event,note"]
+        var lines = ["experiment_id,scenario,target,location,time_s,event,note,road_type,lane_count,ego_lane,target_zone,target_motion,occlusion_state,carry_position,risk_label,node_id"]
         for e in s.events {
             let parts = [
                 csvEscape(e.experimentId),
@@ -87,7 +103,16 @@ class ExperimentStore: ObservableObject {
                 csvEscape(e.location),
                 String(format: "%.3f", e.timeS),
                 csvEscape(e.event),
-                csvEscape(e.note)
+                csvEscape(e.note),
+                csvEscape(e.roadType),
+                csvEscape(e.laneCount),
+                csvEscape(e.egoLane),
+                csvEscape(e.targetZone),
+                csvEscape(e.targetMotion),
+                csvEscape(e.occlusionState),
+                csvEscape(e.carryPosition),
+                csvEscape(e.riskLabel),
+                csvEscape(e.nodeId)
             ]
             lines.append(parts.joined(separator: ","))
         }
