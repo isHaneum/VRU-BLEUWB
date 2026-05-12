@@ -64,7 +64,7 @@ export const parsePhoneCsv = (text: string): PhoneEvent[] => {
 
 export const parseBleScannerLine = (line: string): BleScan | null => {
   const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith('timestamp_ms')) {
+  if (!trimmed || trimmed.startsWith('timestamp_ms') || trimmed.startsWith('#')) {
     return null;
   }
 
@@ -112,7 +112,7 @@ export const parseBleScannerLine = (line: string): BleScan | null => {
 
 export const parseUwbLine = (line: string): UwbRange | null => {
   const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith('timestamp_ms')) {
+  if (!trimmed || trimmed.startsWith('timestamp_ms') || trimmed.startsWith('#')) {
     return null;
   }
 

@@ -65,7 +65,7 @@ export const useSerialSource = <T,>(parser: Parser<T>) => {
           setLastLine(trimmed);
           setReceivedLineCount((count) => count + 1);
 
-          if (trimmed.startsWith('timestamp_ms')) {
+          if (trimmed.startsWith('timestamp_ms') || trimmed.startsWith('#')) {
             continue;
           }
 

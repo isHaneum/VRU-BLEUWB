@@ -24,7 +24,7 @@
  * Serial 출력 형식:
  *   timestamp_ms,node_id,seq_id,device_name,mac,rssi,manufacturer_data_hex
  */
-
+ 
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
@@ -40,7 +40,7 @@
 
 // 필터: 이 prefix로 시작하는 이름만 수집. 빈 문자열이면 전체 수집.
 // NOTE: VRU 태그 기기명을 "VRU_"로 시작하도록 맞춰야 한다.
-#define TARGET_NAME_PREFIX  "VRU_"
+#define TARGET_NAME_PREFIX  ""
 
 static BLEScan* pBLEScan = nullptr;
 static volatile uint32_t seqId = 0;
@@ -49,16 +49,16 @@ static volatile uint32_t seqId = 0;
 class ScanCallback : public BLEAdvertisedDeviceCallbacks {
 public:
     void onResult(BLEAdvertisedDevice dev) override {
-        std::string name = dev.getName();
+        String name = String(dev.getName().c_str());
 
         // 필터 적용
         if (strlen(TARGET_NAME_PREFIX) > 0) {
-            if (name.find(TARGET_NAME_PREFIX) != 0) return;
+            if (!name.startsWith(TARGET_NAME_PREFIX)) return;
         }
 
         uint32_t ts  = millis();
         uint32_t sid = seqId++;
-        std::string mac = dev.getAddress().toString();
+        String mac = String(dev.getAddress().toString().c_str());
         int rssi = dev.getRSSI();
 
         // NOTE: mac은 Randomized MAC일 수 있어 안정적 식별자가 아님.
@@ -67,8 +67,8 @@ public:
         // Manufacturer Data를 HEX 문자열로 변환
         String mfrHex = "";
         if (dev.haveManufacturerData()) {
-            std::string mfr = dev.getManufacturerData();
-            for (size_t i = 0; i < mfr.size(); i++) {
+            String mfr = String(dev.getManufacturerData().c_str());
+            for (size_t i = 0; i < mfr.length(); i++) {
                 char buf[3];
                 snprintf(buf, sizeof(buf), "%02X", (uint8_t)mfr[i]);
                 mfrHex += buf;
@@ -80,7 +80,7 @@ public:
                       ts,
                       NODE_ID,
                       sid,
-                      name.empty() ? "UNKNOWN" : name.c_str(),
+                      name.isEmpty() ? "UNKNOWN" : name.c_str(),
                       mac.c_str(),
                       rssi,
                       mfrHex.isEmpty() ? "" : mfrHex.c_str());
@@ -91,8 +91,11 @@ static ScanCallback scanCallback;
 
 void setup() {
     Serial.begin(115200);
+    delay(300);
     // CSV 헤더 출력
     // mac 컬럼은 Randomized MAC으로 실험 간 동일 기기 추적에 사용하지 말 것
+    Serial.println("# BLE scanner booted");
+    Serial.printf("# filter_prefix=%s,node_id=%s\n", TARGET_NAME_PREFIX, NODE_ID);
     Serial.println("timestamp_ms,node_id,seq_id,device_name,mac,rssi,manufacturer_data_hex");
 
     BLEDevice::init("");
@@ -105,7 +108,8 @@ void setup() {
 
 void loop() {
     // 연속 스캔: 스캔 완료 후 즉시 재시작
-    BLEScanResults results = pBLEScan->start(SCAN_DURATION_SEC, /*is_continue=*/false);
+    pBLEScan->start(SCAN_DURATION_SEC, /*is_continue=*/false);
     pBLEScan->clearResults();
+    Serial.println("# scan cycle complete");
 }
 

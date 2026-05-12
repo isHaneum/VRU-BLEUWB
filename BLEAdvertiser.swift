@@ -7,7 +7,6 @@ final class BLEAdvertiser: NSObject, ObservableObject, CBPeripheralManagerDelega
     @Published private(set) var statusText = "Idle"
     @Published private(set) var advertisedName = ""
 
-    private let serviceUUID = CBUUID(string: "7C6E1001-5C58-43C5-A6E2-FA2C6E0A1001")
     private var peripheralManager: CBPeripheralManager?
     private var pendingPayload: [String: Any]?
 
@@ -19,8 +18,7 @@ final class BLEAdvertiser: NSObject, ObservableObject, CBPeripheralManagerDelega
     func startAdvertising(experimentId: String, nodeId: String, eventCode: String) {
         let name = makeAdvertisedName(experimentId: experimentId, nodeId: nodeId, eventCode: eventCode)
         let payload: [String: Any] = [
-            CBAdvertisementDataLocalNameKey: name,
-            CBAdvertisementDataServiceUUIDsKey: [serviceUUID]
+            CBAdvertisementDataLocalNameKey: name
         ]
 
         advertisedName = name
@@ -55,6 +53,15 @@ final class BLEAdvertiser: NSObject, ObservableObject, CBPeripheralManagerDelega
         }
     }
 
+    func peripheralManagerDidStartAdvertising(_ peripheral: CBPeripheralManager, error: (any Error)?) {
+        if let error {
+            statusText = "Advertising Error: \(error.localizedDescription)"
+            return
+        }
+
+        statusText = "Advertising"
+    }
+
     private func applyAdvertisingIfPossible() {
         guard let peripheralManager, peripheralManager.state == .poweredOn, let pendingPayload else {
             return
@@ -62,15 +69,13 @@ final class BLEAdvertiser: NSObject, ObservableObject, CBPeripheralManagerDelega
 
         peripheralManager.stopAdvertising()
         peripheralManager.startAdvertising(pendingPayload)
-        statusText = "Advertising"
+        statusText = "Starting"
     }
 
     private func makeAdvertisedName(experimentId: String, nodeId: String, eventCode: String) -> String {
-        let exp = sanitize(experimentId, fallback: "EXP")
-        let node = sanitize(nodeId, fallback: "NODE")
-        let event = sanitize(eventCode, fallback: "START")
-        let raw = "VRU_\(node)_\(event)_\(exp)"
-        return String(raw.prefix(26))
+        let node = shortNodeId(from: nodeId)
+        let event = shortEventCode(from: eventCode)
+        return "VRU_\(node)_\(event)"
     }
 
     private func sanitize(_ input: String, fallback: String) -> String {
@@ -81,5 +86,28 @@ final class BLEAdvertiser: NSObject, ObservableObject, CBPeripheralManagerDelega
 
         let filtered = trimmed.uppercased().filter { $0.isLetter || $0.isNumber || $0 == "_" }
         return filtered.isEmpty ? fallback : filtered
+    }
+
+    private func shortNodeId(from nodeId: String) -> String {
+        let cleaned = sanitize(nodeId, fallback: "A")
+        if cleaned.hasPrefix("NODE_") {
+          return String(cleaned.dropFirst(5).prefix(2))
+        }
+        return String(cleaned.prefix(2))
+    }
+
+    private func shortEventCode(from eventCode: String) -> String {
+        switch sanitize(eventCode, fallback: "ST") {
+        case "VISIBLE": return "VIS"
+        case "WALL_CORNER": return "WAL"
+        case "HUMAN_OCCLUDED": return "HUM"
+        case "CAR_OCCLUDED": return "VEH"
+        case "START": return "STA"
+        case "END": return "END"
+        case "PAUSE": return "PAU"
+        case "RESUME": return "RES"
+        default:
+            return String(sanitize(eventCode, fallback: "EVT").prefix(3))
+        }
     }
 }
