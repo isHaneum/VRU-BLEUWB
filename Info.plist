@@ -20,6 +20,8 @@
     <string>1</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>This app advertises experiment state over BLE so the ESP32 scanner and dashboard can measure the phone signal during occlusion tests.</string>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

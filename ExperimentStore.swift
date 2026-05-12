@@ -5,6 +5,7 @@ class ExperimentStore: ObservableObject {
     // MARK: - Published State
     @Published var session: ExperimentSession?
     @Published var navigationPath: [AppRoute] = []
+    @Published var advertiser = BLEAdvertiser()
 
     // MARK: - Experiment Lifecycle
 
@@ -46,6 +47,7 @@ class ExperimentStore: ObservableObject {
             startTime: startTime,
             events: [startEvent]
         )
+        advertiser.startAdvertising(experimentId: experimentId, nodeId: nodeId, eventCode: startEvent.event)
         navigationPath = [.recording]
     }
 
@@ -67,6 +69,7 @@ class ExperimentStore: ObservableObject {
         )
         s.events.append(event)
         session = s
+        advertiser.startAdvertising(experimentId: s.experimentId, nodeId: s.nodeId, eventCode: event.event)
 
         if code == "END" && !navigationPath.contains(.export) {
             navigationPath.append(.export)
@@ -86,6 +89,7 @@ class ExperimentStore: ObservableObject {
     }
 
     func newExperiment() {
+        advertiser.stopAdvertising()
         session = nil
         navigationPath = []
     }

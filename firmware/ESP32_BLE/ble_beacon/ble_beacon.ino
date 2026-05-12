@@ -19,7 +19,6 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEAdvertising.h>
-#include <BLEAdvertisementData.h>
 
 // ── 설정 ──────────────────────────────────────────────────────────────────────
 #define DEVICE_NAME       "VRU_BLE_01"      // BLE 기기 이름 (실험 ID와 맞출 것)
@@ -51,9 +50,6 @@ static void configureAdvertising() {
     mfr += (char)VRU_TYPE;
     mfr += (char)(int8_t)TX_POWER_DBM;  // TX Power 포함 (RSSI 보정용)
     advData.setManufacturerData(mfr);
-
-    // TX Power Level AD type
-    advData.setTXPower(TX_POWER_DBM);
 
     // Scan Response: 기기 이름 포함
     scanRspData.setName(DEVICE_NAME);

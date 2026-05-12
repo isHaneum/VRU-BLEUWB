@@ -27,6 +27,10 @@ struct RecordingView: View {
                     Text("·").foregroundColor(.black)
                     Text(store.session?.nodeId ?? "").font(.caption).foregroundColor(.black)
                 }
+                Text("BLE: \(store.advertiser.statusText) · \(store.advertiser.advertisedName)")
+                    .font(.caption2)
+                    .foregroundColor(.black)
+                    .lineLimit(2)
             }
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity)

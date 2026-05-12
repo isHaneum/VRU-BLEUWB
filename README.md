@@ -136,6 +136,40 @@ Log Serial at 115200 baud, save to data/raw/
 
 See [docs/hardware_setup.md](docs/hardware_setup.md) for wiring (SPI pinout, antenna placement).
 
+### VS Code Build (PlatformIO)
+
+The repository root includes `platformio.ini`, so you can build ESP32 BLE and DWM3000 firmware from VS Code.
+
+**1. Install tools**
+- VS Code extension: PlatformIO IDE
+- Or CLI: `pip install platformio`
+
+**2. Available environments**
+- `ble_beacon`
+- `ble_scanner`
+- `uwb_initiator`
+- `uwb_responder`
+
+**3. Build in VS Code**
+- Command Palette → `PlatformIO: Build`
+- Or open the PlatformIO sidebar and build the selected environment
+
+**4. Build in terminal**
+
+```bash
+pio run -e ble_beacon
+pio run -e ble_scanner
+pio run -e uwb_initiator
+pio run -e uwb_responder
+```
+
+**5. Upload / monitor**
+
+```bash
+pio run -e ble_beacon -t upload
+pio device monitor -b 115200
+```
+
 ### 2. Build iOS ExperimentLogger
 
 1. Xcode → **File > New > Project** → iOS > App (SwiftUI, Swift, iOS 16.0)
