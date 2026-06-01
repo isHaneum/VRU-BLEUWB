@@ -3,9 +3,21 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-dashboard/node_modules
-dashboard/dist
-dashboard/build-output.txt
-dashboard/*.tsbuildinfo
-dashboard/vite.config.d.ts
-dashboard/vite.config.js
+
+# Node / build artifacts (legacy Vite dashboard kept under dashboard-legacy/)
+**/node_modules/
+**/dist/
+**/.vite/
+*.tsbuildinfo
+dashboard-legacy/build-output.txt
+dashboard-legacy/vite.config.d.ts
+dashboard-legacy/vite.config.js
+
+# Zephyr / Python / OS
+.zephyr-workspace/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+Thumbs.db
