@@ -1,12 +1,174 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VLOS-V2X Dashboard</title>
+    <meta name="viewport" content="width=1600, initial-scale=1.0" />
+    <title>PBV Safety Assist · Near-Miss HMI Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <header class="top-bar">
+      <div class="brand">
+        <span class="brand-mark">◆</span>
+        <span class="brand-text">PBV Safety Assist</span>
+        <span class="brand-sub">Cooperative Worker Awareness · Prototype</span>
+      </div>
+      <nav class="mode-tabs">
+        <button class="tab active" data-mode="driver">Driver HMI</button>
+        <button class="tab" data-mode="debug">Debug Monitor</button>
+        <button class="tab" data-mode="fleet">Fleet Safety</button>
+      </nav>
+      <div class="replay-controls">
+        <label class="file-input">
+          <input id="csv-file" type="file" accept=".csv" />
+          <span>Load CSV</span>
+        </label>
+        <button id="btn-play" class="ctrl">▶ Play</button>
+        <button id="btn-pause" class="ctrl">❚❚ Pause</button>
+        <button id="btn-reset" class="ctrl">↺ Reset</button>
+        <label class="speed">
+          Speed
+          <select id="speed-select">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+        <span class="clock" id="clock">t = 0.0 s</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- DRIVER HMI -->
+      <section class="mode driver active" id="mode-driver">
+        <div class="hmi-grid">
+          <div class="hmi-left">
+            <div class="risk-card" id="risk-card">
+              <div class="risk-label">Risk Level</div>
+              <div class="risk-value" id="risk-value">NONE</div>
+              <div class="risk-message" id="risk-message">
+                No immediate worker risk detected.
+              </div>
+              <div class="risk-action" id="risk-action">Proceed normally.</div>
+            </div>
+            <div class="vehicle-strip">
+              <div class="stat">
+                <div class="stat-label">Speed</div>
+                <div class="stat-value"><span id="speed-value">0</span><span class="unit">km/h</span></div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Brake</div>
+                <div class="stat-value" id="brake-value">—</div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">Zone</div>
+                <div class="stat-value small" id="zone-value">—</div>
+              </div>
+            </div>
+            <div class="sensor-strip">
+              <div class="sensor" id="sensor-ble"><span class="dot"></span>BLE</div>
+              <div class="sensor" id="sensor-uwb"><span class="dot"></span>UWB</div>
+              <div class="sensor" id="sensor-replay"><span class="dot on"></span>Replay</div>
+            </div>
+          </div>
+          <div class="hmi-right">
+            <canvas id="zone-canvas" width="720" height="720"></canvas>
+            <div class="worker-card" id="worker-card">
+              <div class="worker-title">Worker Tag</div>
+              <div class="worker-line"><span>ID</span><b id="worker-id">—</b></div>
+              <div class="worker-line"><span>Distance</span><b id="worker-distance">—</b></div>
+              <div class="worker-line"><span>Confidence</span><b id="worker-conf">—</b></div>
+              <div class="worker-line micro"><span>RSSI</span><b id="worker-rssi">—</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DEBUG MONITOR -->
+      <section class="mode debug" id="mode-debug">
+        <div class="debug-grid">
+          <div class="panel">
+            <div class="panel-title">BLE RSSI (dBm)</div>
+            <canvas id="chart-ble" width="900" height="220"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">UWB Range (m)</div>
+            <canvas id="chart-uwb" width="900" height="220"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">UWB Status Timeline</div>
+            <canvas id="chart-status" width="900" height="80"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">Current Sample</div>
+            <table class="kv" id="debug-current"></table>
+          </div>
+          <div class="panel wide">
+            <div class="panel-title">Recent Raw Events</div>
+            <table class="events" id="debug-events">
+              <thead>
+                <tr>
+                  <th>t (s)</th><th>Vehicle</th><th>Spd</th><th>Brake</th>
+                  <th>Worker</th><th>Dist (m)</th><th>UWB</th><th>BLE</th>
+                  <th>RSSI</th><th>Conf</th><th>Zone</th><th>Cond</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="panel wide">
+            <div class="panel-title">Event Log</div>
+            <div class="log" id="debug-log"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FLEET SAFETY -->
+      <section class="mode fleet" id="mode-fleet">
+        <div class="fleet-grid">
+          <div class="kpi"><div class="kpi-label">Near-Miss Events</div><div class="kpi-value" id="kpi-total">0</div></div>
+          <div class="kpi critical"><div class="kpi-label">Critical</div><div class="kpi-value" id="kpi-crit">0</div></div>
+          <div class="kpi warning"><div class="kpi-label">Warning</div><div class="kpi-value" id="kpi-warn">0</div></div>
+          <div class="kpi uncertain"><div class="kpi-label">Uncertain</div><div class="kpi-value" id="kpi-unc">0</div></div>
+          <div class="kpi"><div class="kpi-label">Driver Response Rate</div><div class="kpi-value" id="kpi-resp">—</div></div>
+          <div class="kpi"><div class="kpi-label">Most Risky Zone</div><div class="kpi-value small" id="kpi-zone">—</div></div>
+          <div class="kpi"><div class="kpi-label">Most Unreliable UWB Zone</div><div class="kpi-value small" id="kpi-unrel">—</div></div>
+          <div class="kpi"><div class="kpi-label">Vehicles Monitored</div><div class="kpi-value" id="kpi-vehicles">0</div></div>
+
+          <div class="panel wide">
+            <div class="panel-title">Zone-level Near-Miss Counts</div>
+            <table class="events" id="zone-table">
+              <thead><tr><th>Zone</th><th>Total</th><th>Critical</th><th>Warning</th><th>Uncertain</th><th>UWB Timeouts</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="panel">
+            <div class="panel-title">Vehicle Ranking</div>
+            <table class="events" id="vehicle-table">
+              <thead><tr><th>Vehicle</th><th>Near-Miss</th><th>Critical</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="panel wide">
+            <div class="panel-title">Recent Near-Miss Events</div>
+            <table class="events" id="nearmiss-table">
+              <thead>
+                <tr>
+                  <th>Event ID</th><th>Vehicle</th><th>Worker</th><th>Risk</th>
+                  <th>Min Dist (m)</th><th>Speed (km/h)</th><th>Zone</th>
+                  <th>Duration (s)</th><th>Sensor</th><th>Driver Response</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
   </body>
-  </html>
+</html>

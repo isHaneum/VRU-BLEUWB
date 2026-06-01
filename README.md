@@ -17,6 +17,20 @@ non-risk sidewalk pedestrians.
 
 ---
 
+## PBV Near-Miss Safety HMI Dashboard
+
+This repository now includes a dashboard prototype that translates cooperative
+BLE/UWB worker signals into PBV driver warnings and fleet safety analytics.
+The dashboard can run in replay mode without live UWB hardware, allowing
+evaluation of risk logic, HMI states, and near-miss event logging before live
+sensor integration.
+
+Open [dashboard/index.html](dashboard/index.html) directly in a browser. See
+[dashboard/README.md](dashboard/README.md) for the CSV schema, risk rules, and
+the three views (Driver HMI · Debug Monitor · Fleet Safety).
+
+---
+
 ## Problem Statement
 
 Pedestrians, cyclists, and micro-mobility riders (VRUs) account for a disproportionate

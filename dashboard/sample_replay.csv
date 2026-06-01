@@ -1,0 +1,52 @@
+timestamp,vehicle_id,speed_kmh,brake_pressed,worker_id,object_type,distance_m,uwb_status,ble_detected,confidence,zone,ble_rssi,condition
+0.0,PBV_01,12,false,,,,,false,0.0,Loading Area B,,clear
+1.0,PBV_01,12,false,,,,,false,0.0,Loading Area B,,clear
+2.0,PBV_01,13,false,,,,,false,0.0,Loading Area B,,clear
+3.0,PBV_01,13,false,worker_03,worker,,,true,0.45,Loading Area B,-78,ble_only_far
+4.0,PBV_01,14,false,worker_03,worker,14.2,OK,true,0.62,Loading Area B,-74,worker_far
+5.0,PBV_01,14,false,worker_03,worker,13.1,OK,true,0.68,Loading Area B,-72,caution_zone
+6.0,PBV_01,15,false,worker_03,worker,11.8,OK,true,0.71,Loading Area B,-70,caution_zone
+7.0,PBV_01,15,false,worker_03,worker,10.4,OK,true,0.74,Loading Area B,-68,caution_zone
+8.0,PBV_01,15,false,worker_03,worker,9.2,OK,true,0.78,Loading Area B,-66,approaching
+9.0,PBV_01,14,false,worker_03,worker,8.0,OK,true,0.81,Loading Area B,-64,warning_zone
+10.0,PBV_01,13,false,worker_03,worker,7.1,OK,true,0.83,Loading Area B,-62,warning_zone
+11.0,PBV_01,12,false,worker_03,worker,6.3,OK,true,0.85,Loading Area B,-60,warning_zone
+12.0,PBV_01,12,false,worker_03,worker,5.4,OK,true,0.87,Loading Area B,-58,warning_zone
+13.0,PBV_01,12,false,worker_03,worker,4.8,OK,true,0.88,Loading Area B,-57,critical_imminent
+14.0,PBV_01,11,false,worker_03,worker,4.1,OK,true,0.90,Loading Area B,-55,critical_zone
+15.0,PBV_01,11,false,worker_03,worker,3.6,OK,true,0.91,Loading Area B,-54,critical_zone
+16.0,PBV_01,10,false,worker_03,worker,3.2,OK,true,0.92,Loading Area B,-53,critical_zone
+17.0,PBV_01,8,true,worker_03,worker,3.0,OK,true,0.92,Loading Area B,-53,driver_braking
+18.0,PBV_01,5,true,worker_03,worker,3.1,OK,true,0.91,Loading Area B,-54,driver_braking
+19.0,PBV_01,2,true,worker_03,worker,3.5,OK,true,0.90,Loading Area B,-55,driver_braking
+20.0,PBV_01,0,true,worker_03,worker,4.2,OK,true,0.88,Loading Area B,-57,stopped
+21.0,PBV_01,0,true,worker_03,worker,5.4,OK,true,0.85,Loading Area B,-59,worker_leaving
+22.0,PBV_01,0,false,worker_03,worker,6.8,OK,true,0.82,Loading Area B,-61,worker_leaving
+23.0,PBV_01,3,false,worker_03,worker,8.5,OK,true,0.78,Loading Area B,-63,worker_leaving
+24.0,PBV_01,6,false,worker_03,worker,10.2,OK,true,0.74,Loading Area B,-66,caution_zone
+25.0,PBV_01,9,false,worker_03,worker,12.3,OK,true,0.70,Loading Area B,-69,caution_zone
+26.0,PBV_01,11,false,worker_03,worker,14.5,OK,true,0.65,Loading Area B,-72,fading
+27.0,PBV_01,12,false,,,,,false,0.0,Loading Area B,,clear
+28.0,PBV_01,13,false,,,,,false,0.0,Metal Gate,,clear
+29.0,PBV_01,14,false,worker_07,worker,,,true,0.40,Metal Gate,-80,ble_only_far
+30.0,PBV_01,14,false,worker_07,worker,11.5,OK,true,0.55,Metal Gate,-76,caution_zone
+31.0,PBV_01,13,false,worker_07,worker,9.8,OK,true,0.58,Metal Gate,-73,caution_zone
+32.0,PBV_01,12,false,worker_07,worker,,TIMEOUT,true,0.30,Metal Gate,-72,uwb_timeout
+33.0,PBV_01,11,false,worker_07,worker,,TIMEOUT,true,0.28,Metal Gate,-71,uwb_timeout
+34.0,PBV_01,10,false,worker_07,worker,,TIMEOUT,true,0.27,Metal Gate,-70,uwb_timeout
+35.0,PBV_01,9,false,worker_07,worker,,TIMEOUT,true,0.26,Metal Gate,-71,uwb_timeout
+36.0,PBV_01,8,true,worker_07,worker,,TIMEOUT,true,0.25,Metal Gate,-72,driver_caution_blind
+37.0,PBV_01,5,true,worker_07,worker,7.4,OK,true,0.62,Metal Gate,-68,uwb_recovered
+38.0,PBV_01,4,true,worker_07,worker,8.9,OK,true,0.68,Metal Gate,-70,worker_leaving
+39.0,PBV_01,5,false,worker_07,worker,11.3,OK,true,0.72,Metal Gate,-73,worker_leaving
+40.0,PBV_01,8,false,,,,,false,0.0,Metal Gate,,clear
+41.0,PBV_01,10,false,,,,,false,0.0,Yard Exit,,clear
+42.0,PBV_01,12,false,worker_11,worker,9.2,OK,true,0.75,Yard Exit,-65,warning_zone
+43.0,PBV_01,12,false,worker_11,worker,7.6,OK,true,0.80,Yard Exit,-63,warning_zone
+44.0,PBV_01,12,false,worker_11,worker,6.0,OK,true,0.85,Yard Exit,-60,warning_zone
+45.0,PBV_01,12,false,worker_11,worker,4.5,OK,true,0.90,Yard Exit,-57,critical_zone
+46.0,PBV_01,11,false,worker_11,worker,3.8,OK,true,0.92,Yard Exit,-55,critical_zone
+47.0,PBV_01,7,true,worker_11,worker,4.0,OK,true,0.91,Yard Exit,-56,driver_braking
+48.0,PBV_01,3,true,worker_11,worker,5.5,OK,true,0.88,Yard Exit,-59,worker_leaving
+49.0,PBV_01,0,true,worker_11,worker,7.8,OK,true,0.82,Yard Exit,-63,stopped
+50.0,PBV_01,2,false,,,,,false,0.0,Yard Exit,,clear
