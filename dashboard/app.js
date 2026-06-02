@@ -227,18 +227,44 @@
   }
 
   // ----- Driver HMI -----
+  const MANEUVER_ICONS = { NONE: "\u2192", CAUTION: "!", WARNING: "\u25B2", CRITICAL: "\u25A0", UNCERTAIN: "?" };
+  const MANEUVER_ACTIONS = { NONE: "PROCEED", CAUTION: "SLOW", WARNING: "SLOW DOWN", CRITICAL: "STOP", UNCERTAIN: "VERIFY" };
+
   function renderDriver() {
     const e = currentEntry();
     const risk = e ? e.risk : "NONE";
-    const card = document.getElementById("risk-card");
-    card.dataset.level = risk;
-    document.getElementById("risk-value").textContent = risk;
+    const shell = document.getElementById("nav-shell");
+    shell.dataset.level = risk;
+
+    // Maneuver banner — mimics nav app's "next turn" card
+    document.getElementById("maneuver-icon").textContent = MANEUVER_ICONS[risk];
+    document.getElementById("maneuver-action").textContent = MANEUVER_ACTIONS[risk];
+    const maneuverDist = document.getElementById("maneuver-distance");
+    const maneuverText = document.getElementById("maneuver-text");
+    if (e && e.distance_m != null) {
+      maneuverDist.textContent = e.distance_m.toFixed(1) + " m";
+      maneuverText.textContent = risk === "CRITICAL" ? "Worker on collision path"
+        : risk === "WARNING" ? "Worker close to vehicle path"
+        : risk === "CAUTION" ? "Worker in surrounding area"
+        : "Worker tracked at safe distance";
+    } else if (e && e.uwb_status === "TIMEOUT") {
+      maneuverDist.textContent = "—";
+      maneuverText.textContent = "UWB signal lost · range unknown";
+    } else if (e && e.ble_detected) {
+      maneuverDist.textContent = "BLE";
+      maneuverText.textContent = "Worker tag detected nearby";
+    } else {
+      maneuverDist.textContent = "—";
+      maneuverText.textContent = "All clear ahead";
+    }
+
+    document.getElementById("risk-chip").textContent = risk;
     document.getElementById("risk-message").textContent = RISK_MESSAGES[risk].msg;
     document.getElementById("risk-action").textContent = RISK_MESSAGES[risk].action;
 
     document.getElementById("speed-value").textContent = e ? Math.round(e.speed_kmh) : 0;
-    document.getElementById("brake-value").textContent = e ? (e.brake_pressed ? "ON" : "OFF") : "—";
     document.getElementById("zone-value").textContent = e ? e.zone : "—";
+    document.getElementById("brake-indicator").classList.toggle("on", !!(e && e.brake_pressed));
 
     const ble = document.getElementById("sensor-ble");
     const uwb = document.getElementById("sensor-uwb");
@@ -269,7 +295,7 @@
     const dot = node.querySelector(".dot");
     dot.classList.remove("on", "warn", "err");
     if (state) dot.classList.add(state);
-    node.classList.toggle("active", !!state);
+    node.classList.toggle("on", !!state);
   }
 
   function drawZoneCanvas(e) {
@@ -277,6 +303,7 @@
     const parent = canvas.parentElement;
     const dpr = window.devicePixelRatio || 1;
     const w = parent.clientWidth, h = parent.clientHeight;
+    if (!w || !h) return;
     if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
       canvas.width = w * dpr; canvas.height = h * dpr;
       canvas.style.width = w + "px"; canvas.style.height = h + "px";
@@ -285,82 +312,127 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    const cx = w / 2, cy = h / 2;
-    const maxR = Math.min(w, h) / 2 - 24;
-    const scale = maxR / 18; // 18m radius shown
-    // background grid
-    ctx.strokeStyle = "rgba(255,255,255,0.04)";
-    ctx.lineWidth = 1;
-    for (let r = 3; r <= 18; r += 3) {
-      ctx.beginPath(); ctx.arc(cx, cy, r * scale, 0, Math.PI * 2); ctx.stroke();
+    // Vehicle near the bottom; map shows ~18 m ahead
+    const vx = w / 2;
+    const vy = h * 0.78;
+    const meters = 22;
+    const scale = (h * 0.85) / meters;
+
+    // Background (asphalt) gradient
+    const grd = ctx.createLinearGradient(0, 0, 0, h);
+    grd.addColorStop(0, "#0a1018"); grd.addColorStop(1, "#070b11");
+    ctx.fillStyle = grd; ctx.fillRect(0, 0, w, h);
+
+    // Road as a perspective trapezoid
+    const roadBot = w * 0.62, roadTop = w * 0.40;
+    ctx.beginPath();
+    ctx.moveTo(vx - roadBot / 2, h);
+    ctx.lineTo(vx + roadBot / 2, h);
+    ctx.lineTo(vx + roadTop / 2, 0);
+    ctx.lineTo(vx - roadTop / 2, 0);
+    ctx.closePath();
+    ctx.fillStyle = "#11171f"; ctx.fill();
+
+    // Road edges
+    ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(vx - roadBot / 2, h); ctx.lineTo(vx - roadTop / 2, 0);
+    ctx.moveTo(vx + roadBot / 2, h); ctx.lineTo(vx + roadTop / 2, 0);
+    ctx.stroke();
+
+    // Animated dashed center lane
+    const dashOffset = (performance.now() / 30) % 32;
+    ctx.strokeStyle = "rgba(255,206,58,0.55)"; ctx.lineWidth = 4;
+    ctx.setLineDash([16, 16]); ctx.lineDashOffset = -dashOffset;
+    ctx.beginPath(); ctx.moveTo(vx, h); ctx.lineTo(vx, 0); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+
+    // 5 m distance ticks
+    ctx.strokeStyle = "rgba(255,255,255,0.06)"; ctx.lineWidth = 1;
+    ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.font = "11px Segoe UI";
+    for (let d = 5; d <= 18; d += 5) {
+      const y = vy - d * scale; if (y < 0) break;
+      ctx.beginPath(); ctx.moveTo(20, y); ctx.lineTo(w - 20, y); ctx.stroke();
+      ctx.fillText(d + " m", 24, y - 4);
     }
 
-    // zone rings
+    // Range zones around the vehicle
     const zones = [
-      { r: 15, color: "rgba(255,206,58,0.10)", stroke: "rgba(255,206,58,0.55)", label: "15 m · CAUTION" },
-      { r: 10, color: "rgba(255,138,42,0.12)", stroke: "rgba(255,138,42,0.65)", label: "10 m · WARNING" },
-      { r: 5,  color: "rgba(255,59,59,0.16)",  stroke: "rgba(255,59,59,0.75)",  label: "5 m · CRITICAL" },
+      { r: 15, fill: "rgba(255,206,58,0.10)", stroke: "rgba(255,206,58,0.55)" },
+      { r: 10, fill: "rgba(255,138,42,0.13)", stroke: "rgba(255,138,42,0.65)" },
+      { r: 5,  fill: "rgba(255,59,59,0.18)",  stroke: "rgba(255,59,59,0.80)"  },
     ];
     for (const z of zones) {
-      ctx.beginPath(); ctx.arc(cx, cy, z.r * scale, 0, Math.PI * 2);
-      ctx.fillStyle = z.color; ctx.fill();
+      ctx.beginPath(); ctx.arc(vx, vy, z.r * scale, 0, Math.PI * 2);
+      ctx.fillStyle = z.fill; ctx.fill();
       ctx.strokeStyle = z.stroke; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = z.stroke; ctx.font = "11px Segoe UI";
-      ctx.fillText(z.label, cx + 6, cy - z.r * scale - 4);
     }
 
-    // vehicle (PBV) box pointing up
+    // Worker range arc (bearing unknown)
+    if (e && e.distance_m != null) {
+      const r = e.distance_m * scale;
+      const COLOR = { NONE: "rgba(160,170,185,0.9)", CAUTION: "rgba(255,206,58,1)",
+        WARNING: "rgba(255,138,42,1)", CRITICAL: "rgba(255,59,59,1)", UNCERTAIN: "rgba(138,123,255,1)" };
+      const col = COLOR[e.risk];
+      ctx.strokeStyle = col; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(vx, vy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]); ctx.globalAlpha = 0.55;
+      ctx.beginPath(); ctx.arc(vx, vy, Math.max(0, r - scale), 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(vx, vy, r + scale, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.setLineDash([]);
+
+      ctx.font = "bold 14px Segoe UI";
+      const label = e.distance_m.toFixed(1) + " m";
+      const lw = ctx.measureText(label).width + 16;
+      const ly = vy - r - 14;
+      ctx.fillStyle = col;
+      roundRect(ctx, vx - lw / 2, ly - 14, lw, 22, 11); ctx.fill();
+      ctx.fillStyle = "#0a0e14"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(label, vx, ly - 3);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+
+      ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.font = "10px Segoe UI";
+      ctx.fillText("bearing unknown · single anchor", vx + r * 0.65, vy + 4);
+    } else if (e && e.uwb_status === "TIMEOUT" && e.ble_detected) {
+      ctx.fillStyle = "rgba(138,123,255,0.16)";
+      ctx.beginPath(); ctx.arc(vx, vy, 15 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "rgba(138,123,255,0.9)"; ctx.setLineDash([10, 8]); ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(vx, vy, 15 * scale, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(138,123,255,1)"; ctx.font = "bold 13px Segoe UI"; ctx.textAlign = "center";
+      ctx.fillText("UWB TIMEOUT · BLE only", vx, vy - 15 * scale - 10);
+      ctx.textAlign = "left";
+    } else if (e && e.ble_detected) {
+      ctx.fillStyle = "rgba(255,206,58,0.08)";
+      ctx.beginPath(); ctx.arc(vx, vy, 15 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(255,206,58,0.85)"; ctx.font = "12px Segoe UI"; ctx.textAlign = "center";
+      ctx.fillText("BLE detected · awaiting UWB range", vx, vy - 15 * scale - 8);
+      ctx.textAlign = "left";
+    }
+
+    // Vehicle (arrow-shaped PBV) with glow
     ctx.save();
-    ctx.translate(cx, cy);
+    ctx.translate(vx, vy);
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 50);
+    glow.addColorStop(0, "rgba(79,209,255,0.45)");
+    glow.addColorStop(1, "rgba(79,209,255,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, 50, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, -28);
+    ctx.lineTo(16, 12);
+    ctx.lineTo(10, 22);
+    ctx.lineTo(-10, 22);
+    ctx.lineTo(-16, 12);
+    ctx.closePath();
     ctx.fillStyle = "#4fd1ff";
-    ctx.strokeStyle = "#0a0e14"; ctx.lineWidth = 2;
-    const vw = 22, vh = 38;
-    roundRect(ctx, -vw/2, -vh/2, vw, vh, 5);
-    ctx.fill(); ctx.stroke();
-    // direction indicator (front)
-    ctx.beginPath(); ctx.moveTo(0, -vh/2 - 8); ctx.lineTo(-6, -vh/2); ctx.lineTo(6, -vh/2); ctx.closePath();
+    ctx.shadowColor = "rgba(79,209,255,0.6)"; ctx.shadowBlur = 12;
+    ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(10,14,20,0.55)";
+    ctx.beginPath();
+    ctx.moveTo(0, -18); ctx.lineTo(10, 0); ctx.lineTo(-10, 0); ctx.closePath();
     ctx.fill();
     ctx.restore();
-
-    // worker visualization — range ring (direction unknown)
-    if (!e) return;
-    if (e.distance_m != null) {
-      const r = e.distance_m * scale;
-      const colorByRisk = {
-        NONE: "rgba(160,170,185,0.7)",
-        CAUTION: "rgba(255,206,58,1)",
-        WARNING: "rgba(255,138,42,1)",
-        CRITICAL: "rgba(255,59,59,1)",
-        UNCERTAIN: "rgba(138,123,255,1)",
-      };
-      ctx.strokeStyle = colorByRisk[e.risk] || "#fff";
-      ctx.lineWidth = 3;
-      ctx.setLineDash([]);
-      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-      // band to indicate ±1m uncertainty
-      ctx.lineWidth = 1; ctx.setLineDash([4, 4]); ctx.globalAlpha = 0.55;
-      ctx.beginPath(); ctx.arc(cx, cy, Math.max(0, r - scale), 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(cx, cy, r + scale, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1; ctx.setLineDash([]);
-      ctx.fillStyle = ctx.strokeStyle;
-      ctx.font = "bold 13px Segoe UI";
-      ctx.fillText(`Worker @ ${e.distance_m.toFixed(1)} m (bearing unknown)`, cx - 130, cy + r + 18);
-    } else if (e.uwb_status === "TIMEOUT" && e.ble_detected) {
-      // UNCERTAIN — blind zone band from 0 to 15 m
-      ctx.fillStyle = "rgba(138,123,255,0.14)";
-      ctx.beginPath(); ctx.arc(cx, cy, 15 * scale, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "rgba(138,123,255,0.9)";
-      ctx.setLineDash([8, 6]); ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(cx, cy, 15 * scale, 0, Math.PI * 2); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(138,123,255,1)"; ctx.font = "bold 13px Segoe UI";
-      ctx.fillText("UWB TIMEOUT · BLE only · range unknown", cx - 150, cy + 15 * scale + 18);
-    } else if (e.ble_detected) {
-      ctx.fillStyle = "rgba(255,206,58,0.10)";
-      ctx.beginPath(); ctx.arc(cx, cy, 15 * scale, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "rgba(255,206,58,0.9)"; ctx.font = "12px Segoe UI";
-      ctx.fillText("BLE detected · awaiting UWB range", cx - 110, cy + 15 * scale + 18);
-    }
   }
 
   function roundRect(ctx, x, y, w, h, r) {

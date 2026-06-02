@@ -42,44 +42,58 @@
     <main>
       <!-- DRIVER HMI -->
       <section class="mode driver active" id="mode-driver">
-        <div class="hmi-grid">
-          <div class="hmi-left">
-            <div class="risk-card" id="risk-card">
-              <div class="risk-label">Risk Level</div>
-              <div class="risk-value" id="risk-value">NONE</div>
-              <div class="risk-message" id="risk-message">
-                No immediate worker risk detected.
+        <div class="nav-shell" id="nav-shell" data-level="NONE">
+          <!-- Top maneuver banner (mimics nav app's next-turn card) -->
+          <div class="nav-top">
+            <div class="maneuver" id="maneuver-card">
+              <div class="maneuver-icon" id="maneuver-icon">●</div>
+              <div class="maneuver-body">
+                <div class="maneuver-distance" id="maneuver-distance">— m</div>
+                <div class="maneuver-text" id="maneuver-text">All clear ahead</div>
               </div>
-              <div class="risk-action" id="risk-action">Proceed normally.</div>
+              <div class="maneuver-action" id="maneuver-action">Proceed</div>
             </div>
-            <div class="vehicle-strip">
-              <div class="stat">
-                <div class="stat-label">Speed</div>
-                <div class="stat-value"><span id="speed-value">0</span><span class="unit">km/h</span></div>
-              </div>
-              <div class="stat">
-                <div class="stat-label">Brake</div>
-                <div class="stat-value" id="brake-value">—</div>
-              </div>
-              <div class="stat">
-                <div class="stat-label">Zone</div>
-                <div class="stat-value small" id="zone-value">—</div>
-              </div>
-            </div>
-            <div class="sensor-strip">
-              <div class="sensor" id="sensor-ble"><span class="dot"></span>BLE</div>
-              <div class="sensor" id="sensor-uwb"><span class="dot"></span>UWB</div>
-              <div class="sensor" id="sensor-replay"><span class="dot on"></span>Replay</div>
+            <div class="nav-status">
+              <div class="status-pill" id="sensor-ble"><span class="dot"></span>BLE</div>
+              <div class="status-pill" id="sensor-uwb"><span class="dot"></span>UWB</div>
+              <div class="status-pill on" id="sensor-replay"><span class="dot on"></span>Replay</div>
+              <div class="status-pill zone-pill"><span class="ico">⚑</span><span id="zone-value">—</span></div>
             </div>
           </div>
-          <div class="hmi-right">
-            <canvas id="zone-canvas" width="720" height="720"></canvas>
-            <div class="worker-card" id="worker-card">
-              <div class="worker-title">Worker Tag</div>
-              <div class="worker-line"><span>ID</span><b id="worker-id">—</b></div>
-              <div class="worker-line"><span>Distance</span><b id="worker-distance">—</b></div>
-              <div class="worker-line"><span>Confidence</span><b id="worker-conf">—</b></div>
-              <div class="worker-line micro"><span>RSSI</span><b id="worker-rssi">—</b></div>
+
+          <!-- Main map / road view -->
+          <div class="nav-map">
+            <canvas id="zone-canvas"></canvas>
+            <div class="map-overlay-tl">
+              <div class="risk-chip" id="risk-chip">NONE</div>
+              <div class="risk-msg" id="risk-message">No immediate worker risk detected.</div>
+            </div>
+            <div class="map-overlay-tr">
+              <div class="worker-card" id="worker-card">
+                <div class="worker-title">Worker Tag</div>
+                <div class="worker-line"><span>ID</span><b id="worker-id">—</b></div>
+                <div class="worker-line"><span>Distance</span><b id="worker-distance">—</b></div>
+                <div class="worker-line"><span>Confidence</span><b id="worker-conf">—</b></div>
+                <div class="worker-line micro"><span>RSSI</span><b id="worker-rssi">—</b></div>
+              </div>
+            </div>
+            <div class="map-legend">
+              <span class="lg lg-c">15 m caution</span>
+              <span class="lg lg-w">10 m warning</span>
+              <span class="lg lg-x">5 m critical</span>
+            </div>
+          </div>
+
+          <!-- Bottom HUD: speedometer + action bar -->
+          <div class="nav-bottom">
+            <div class="hud-speed">
+              <div class="speed-num"><span id="speed-value">0</span><span class="speed-unit">km/h</span></div>
+              <div class="speed-label">SPEED</div>
+            </div>
+            <div class="hud-action" id="risk-action">Proceed normally.</div>
+            <div class="hud-brake" id="brake-indicator">
+              <div class="brake-light"></div>
+              <div class="brake-label">BRAKE</div>
             </div>
           </div>
         </div>
