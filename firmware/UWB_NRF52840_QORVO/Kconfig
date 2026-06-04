@@ -1,0 +1,33 @@
+source "Kconfig.zephyr"
+
+menu "VLOS nRF52840 UWB options"
+
+config VLOS_ROLE_INITIATOR
+    bool "Build initiator role"
+    default y
+    help
+      Enables the initiator-side control loop. Disable this to build the
+      responder role instead.
+
+config VLOS_NODE_ID
+    string "Node identifier"
+    default "node_A"
+    help
+      Identifier emitted on the serial CSV stream for dashboard alignment.
+
+config VLOS_POLL_INTERVAL_MS
+    int "Loop interval in milliseconds"
+    range 20 2000
+    default 100
+    help
+      Main loop interval for placeholder ranging attempts or status output.
+
+config VLOS_DRIVER_STUB_LOG_PERIOD_MS
+    int "Stub log period in milliseconds"
+    range 100 10000
+    default 1000
+    help
+      When the Qorvo adapter is still a stub, limit how often placeholder
+      status lines are emitted.
+
+endmenu

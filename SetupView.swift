@@ -21,9 +21,9 @@ struct SetupView: View {
         "S4 Lane-splitting Two-wheeler",
         "S5 Carry Position Degradation",
         "S6 Cooperative Warning",
-        "No Obstacle",
+        "Visible / No Obstacle",
         "Human Occlusion",
-        "Vehicle Occlusion",
+        "Metal / Vehicle Occlusion",
         "Wall / Corner"
     ]
     private let targets   = ["Pedestrian", "Bicycle", "Motorcycle", "Scooter", "Other"]

@@ -44,7 +44,7 @@ struct RecordingView: View {
 
                     sectionHeader("Occlusion / Visibility")
                     LazyVGrid(columns: twoColumns, spacing: 10) {
-                        eventButton("Car Occluded",   code: "CAR_OCCLUDED")
+                        eventButton("Metal / Vehicle", code: "METAL_OCCLUDED")
                         eventButton("Human Occluded", code: "HUMAN_OCCLUDED")
                         eventButton("Wall / Corner",  code: "WALL_CORNER")
                         eventButton("Visible",        code: "VISIBLE")
