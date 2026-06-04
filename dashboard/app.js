@@ -727,3 +727,231 @@
   // Expose for ad-hoc inspection
   window.PBV = { State, classifyRisk, parseCsv };
 })();
+
+
+/* =========================================================================
+ * Live UWB Serial module
+ * Connects to nRF52840 DK boards via Web Serial API (Chrome / Edge).
+ * Firmware CSV format: timestamp_ms,node_id,seq_id,range_m,status
+ * ========================================================================= */
+(function () {
+  "use strict";
+
+  var LiveUWB = {
+    portA: null, portB: null,
+    readerA: null, readerB: null,
+    samples: [], maxSamples: 200,
+    count: 0, minRange: Infinity, maxRange: -Infinity, sumRange: 0
+  };
+
+  function parseUWBLine(line) {
+    if (!line || /^[#]/.test(line) || /^timestamp/.test(line)) return null;
+    var p = line.split(",");
+    if (p.length < 5) return null;
+    var ts = parseInt(p[0], 10);
+    if (isNaN(ts)) return null;
+    var range_str = (p[3] || "").trim();
+    return {
+      ts_ms: ts,
+      node_id: (p[1] || "").trim(),
+      range_m: range_str === "" ? null : parseFloat(range_str),
+      status: (p[4] || "").trim()
+    };
+  }
+
+  function liveLog(msg, cls) {
+    var el = document.getElementById("live-log");
+    if (!el) return;
+    var div = document.createElement("div");
+    div.className = "ln" + (cls ? " " + cls : "");
+    div.textContent = msg;
+    el.insertBefore(div, el.firstChild);
+    while (el.children.length > 400) el.removeChild(el.lastChild);
+  }
+
+  function onUWBSample(sample, rawLine) {
+    liveLog(rawLine, sample.status === "OK" ? "ok" : "dim");
+    var badge = document.getElementById("live-status-badge");
+    if (badge) {
+      badge.textContent = sample.status;
+      badge.className = "live-status-badge" + (sample.status === "OK" ? " ok" : " err");
+    }
+    if (sample.status !== "OK" || sample.range_m == null) return;
+
+    LiveUWB.count++;
+    LiveUWB.sumRange += sample.range_m;
+    if (sample.range_m < LiveUWB.minRange) LiveUWB.minRange = sample.range_m;
+    if (sample.range_m > LiveUWB.maxRange) LiveUWB.maxRange = sample.range_m;
+    LiveUWB.samples.push(sample);
+    if (LiveUWB.samples.length > LiveUWB.maxSamples) LiveUWB.samples.shift();
+
+    var num = document.getElementById("live-range-num");
+    if (num) num.textContent = sample.range_m.toFixed(3);
+
+    var el_c = document.getElementById("live-count"); if (el_c) el_c.textContent = LiveUWB.count;
+    var el_n = document.getElementById("live-min");   if (el_n) el_n.textContent = LiveUWB.minRange.toFixed(3) + " m";
+    var el_x = document.getElementById("live-max");   if (el_x) el_x.textContent = LiveUWB.maxRange.toFixed(3) + " m";
+    var el_a = document.getElementById("live-avg");   if (el_a) el_a.textContent = (LiveUWB.sumRange / LiveUWB.count).toFixed(3) + " m";
+
+    drawLiveChart();
+  }
+
+  function setSlotUI(slot, connected) {
+    var s = slot.toLowerCase();
+    var statusEl = document.getElementById("status-" + s);
+    var btnConn  = document.getElementById("btn-connect-" + s);
+    var btnDisc  = document.getElementById("btn-disconnect-" + s);
+    if (statusEl) {
+      statusEl.textContent = connected ? "\u25CF Connected" : "\u25CF Disconnected";
+      statusEl.className   = "serial-status" + (connected ? " connected" : "");
+    }
+    if (btnConn) btnConn.disabled = connected;
+    if (btnDisc) btnDisc.disabled = !connected;
+  }
+
+  function readSerial(slot, reader) {
+    var dec = new TextDecoder();
+    var buf = "";
+    function pump() {
+      reader.read().then(function (res) {
+        if (res.done) { setSlotUI(slot, false); return; }
+        buf += dec.decode(res.value, { stream: true });
+        var nl;
+        while ((nl = buf.indexOf("\n")) !== -1) {
+          var line = buf.slice(0, nl).replace(/\r$/, "");
+          buf = buf.slice(nl + 1);
+          var parsed = parseUWBLine(line);
+          if (parsed) onUWBSample(parsed, line);
+        }
+        pump();
+      }).catch(function (e) {
+        if (e.name !== "AbortError") liveLog("[" + slot + "] read error: " + e.message, "err");
+        setSlotUI(slot, false);
+      });
+    }
+    pump();
+  }
+
+  function connectSerial(slot) {
+    if (!("serial" in navigator)) {
+      alert("Web Serial API not supported.\nUse Chrome or Edge, and open via http:// (not file://).");
+      return;
+    }
+    navigator.serial.requestPort().then(function (port) {
+      return port.open({ baudRate: 115200 }).then(function () { return port; });
+    }).then(function (port) {
+      var reader = port.readable.getReader();
+      if (slot === "A") { LiveUWB.portA = port; LiveUWB.readerA = reader; }
+      else              { LiveUWB.portB = port; LiveUWB.readerB = reader; }
+      setSlotUI(slot, true);
+      liveLog("[" + slot + "] connected at 115200 baud", "ok");
+      readSerial(slot, reader);
+    }).catch(function (e) {
+      if (e.name !== "NotFoundError") liveLog("[" + slot + "] connect error: " + e.message, "err");
+    });
+  }
+
+  function disconnectSerial(slot) {
+    var reader = slot === "A" ? LiveUWB.readerA : LiveUWB.readerB;
+    if (reader) {
+      reader.cancel().catch(function () {});
+    }
+    if (slot === "A") { LiveUWB.readerA = null; LiveUWB.portA = null; }
+    else              { LiveUWB.readerB = null; LiveUWB.portB = null; }
+    setSlotUI(slot, false);
+  }
+
+  function resetLive() {
+    LiveUWB.samples = [];
+    LiveUWB.count = 0; LiveUWB.minRange = Infinity;
+    LiveUWB.maxRange = -Infinity; LiveUWB.sumRange = 0;
+    ["live-range-num","live-status-badge","live-count","live-min","live-max","live-avg"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = "--";
+    });
+    var badge = document.getElementById("live-status-badge");
+    if (badge) badge.className = "live-status-badge";
+    var logEl = document.getElementById("live-log");
+    if (logEl) logEl.innerHTML = "";
+    drawLiveChart();
+  }
+
+  function drawLiveChart() {
+    var canvas = document.getElementById("chart-live-range");
+    if (!canvas) return;
+    var ctx = canvas.getContext("2d");
+    var W = canvas.width, H = canvas.height;
+    var PAD = { top: 24, right: 24, bottom: 34, left: 62 };
+
+    ctx.fillStyle = "#0c121b";
+    ctx.fillRect(0, 0, W, H);
+
+    var samples = LiveUWB.samples.filter(function (s) { return s.range_m != null; });
+    if (samples.length === 0) {
+      ctx.fillStyle = "#3a4a5a";
+      ctx.font = "14px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("No ranging data \u2014 connect node_A and wait for OK samples", W / 2, H / 2);
+      return;
+    }
+
+    var vals = samples.map(function (s) { return s.range_m; });
+    var yMin = Math.max(0, Math.min.apply(null, vals) - 0.3);
+    var yMax = Math.max.apply(null, vals) + 0.3;
+    if (yMax - yMin < 0.5) { var mid = (yMax + yMin) / 2; yMin = mid - 0.25; yMax = mid + 0.25; }
+
+    var W2 = W - PAD.left - PAD.right;
+    var H2 = H - PAD.top  - PAD.bottom;
+    function px(i) { return PAD.left + (samples.length > 1 ? i / (samples.length - 1) * W2 : W2 / 2); }
+    function py(v) { return PAD.top  + (1 - (v - yMin) / (yMax - yMin)) * H2; }
+
+    // grid
+    ctx.strokeStyle = "#1a2330"; ctx.lineWidth = 1;
+    for (var t = 0; t <= 5; t++) {
+      var v = yMin + (yMax - yMin) * t / 5;
+      var y = py(v);
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+      ctx.fillStyle = "#778899"; ctx.font = "11px monospace"; ctx.textAlign = "right";
+      ctx.fillText(v.toFixed(2) + "m", PAD.left - 6, y + 4);
+    }
+
+    // fill
+    ctx.beginPath();
+    ctx.moveTo(px(0), py(vals[0]));
+    vals.forEach(function (v, i) { ctx.lineTo(px(i), py(v)); });
+    ctx.lineTo(px(vals.length - 1), PAD.top + H2);
+    ctx.lineTo(px(0), PAD.top + H2);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(0,200,255,0.07)";
+    ctx.fill();
+
+    // line
+    ctx.beginPath(); ctx.strokeStyle = "#00c8ff"; ctx.lineWidth = 2;
+    vals.forEach(function (v, i) { i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)); });
+    ctx.stroke();
+
+    // latest point
+    var lv = vals[vals.length - 1];
+    ctx.beginPath();
+    ctx.arc(px(vals.length - 1), py(lv), 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#00c8ff"; ctx.fill();
+
+    // x-axis note
+    ctx.fillStyle = "#4a5a6a"; ctx.font = "11px monospace"; ctx.textAlign = "center";
+    ctx.fillText("\u2190 older   " + vals.length + " samples   newer \u2192", W / 2, H - 6);
+  }
+
+  window.addEventListener("DOMContentLoaded", function () {
+    var ba = document.getElementById("btn-connect-a");
+    if (!ba) return;
+    ba.addEventListener("click", function () { connectSerial("A"); });
+    document.getElementById("btn-connect-b").addEventListener("click", function () { connectSerial("B"); });
+    document.getElementById("btn-disconnect-a").addEventListener("click", function () { disconnectSerial("A"); });
+    document.getElementById("btn-disconnect-b").addEventListener("click", function () { disconnectSerial("B"); });
+    document.getElementById("btn-reset-live").addEventListener("click", resetLive);
+    drawLiveChart();
+  });
+
+  // expose for debug
+  window.LiveUWB = LiveUWB;
+})();

@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -17,6 +17,7 @@
         <button class="tab active" data-mode="driver">Driver HMI</button>
         <button class="tab" data-mode="debug">Debug Monitor</button>
         <button class="tab" data-mode="fleet">Fleet Safety</button>
+        <button class="tab" data-mode="live-uwb">&#x1F4E1; Live UWB</button>
       </nav>
       <div class="replay-controls">
         <label class="file-input">
@@ -178,6 +179,48 @@
               </thead>
               <tbody></tbody>
             </table>
+          </div>
+        </div>
+      </section>
+      <!-- LIVE UWB -->
+      <section class="mode live-uwb" id="mode-live-uwb">
+        <div class="live-grid">
+          <div class="panel live-conn-panel">
+            <div class="panel-title">SERIAL CONNECTIONS</div>
+            <div class="serial-row">
+              <button class="ctrl" id="btn-connect-a">Connect node_A</button>
+              <span class="serial-status" id="status-a">&#x25CF; Disconnected</span>
+              <button class="ctrl" id="btn-disconnect-a" disabled>Disconnect</button>
+            </div>
+            <div class="serial-row">
+              <button class="ctrl" id="btn-connect-b">Connect node_B</button>
+              <span class="serial-status" id="status-b">&#x25CF; Disconnected</span>
+              <button class="ctrl" id="btn-disconnect-b" disabled>Disconnect</button>
+            </div>
+            <div class="serial-note">Chrome / Edge required &middot; open via http:// &middot; select COM port per board when prompted.</div>
+            <button class="ctrl" id="btn-reset-live" style="margin-top:12px">Reset Stats</button>
+          </div>
+          <div class="panel live-range-panel">
+            <div class="panel-title">CURRENT RANGE</div>
+            <div class="live-range-display">
+              <div class="live-range-num" id="live-range-num">--</div>
+              <div class="live-range-unit">meters</div>
+            </div>
+            <div class="live-status-badge" id="live-status-badge">--</div>
+            <div class="live-stats">
+              <div class="live-stat"><span>SAMPLES</span><b id="live-count">0</b></div>
+              <div class="live-stat"><span>MIN</span><b id="live-min">--</b></div>
+              <div class="live-stat"><span>MAX</span><b id="live-max">--</b></div>
+              <div class="live-stat"><span>AVG</span><b id="live-avg">--</b></div>
+            </div>
+          </div>
+          <div class="panel wide">
+            <div class="panel-title">RANGE HISTORY &mdash; last 200 OK samples (node_A)</div>
+            <canvas id="chart-live-range" width="1400" height="260"></canvas>
+          </div>
+          <div class="panel wide">
+            <div class="panel-title">RAW SERIAL LOG</div>
+            <div class="log live-log" id="live-log"></div>
           </div>
         </div>
       </section>

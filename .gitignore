@@ -21,3 +21,7 @@ __pycache__/
 venv/
 .DS_Store
 Thumbs.db
+
+build_dw3_init/
+build_dw3_resp/
+build_resp.log

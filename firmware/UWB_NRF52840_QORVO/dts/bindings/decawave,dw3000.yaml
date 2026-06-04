@@ -1,0 +1,26 @@
+# decawave,dw3000.yaml
+#
+# DT binding for DWM3000EVB shield (DW3000 UWB transceiver via SPI).
+# Used with the nRF52840 DK Arduino SPI3 interface.
+
+description: Decawave DW3000 UWB transceiver
+
+compatible: "decawave,dw3000"
+
+include: spi-device.yaml
+
+properties:
+  int-gpios:
+    type: phandle-array
+    required: true
+    description: IRQ / data-ready GPIO (active high)
+
+  reset-gpios:
+    type: phandle-array
+    required: true
+    description: Hard-reset GPIO (active low – assert low to reset)
+
+  wakeup-gpios:
+    type: phandle-array
+    required: false
+    description: WAKEUP GPIO (active high – drives DW3000 WAKEUP pin)

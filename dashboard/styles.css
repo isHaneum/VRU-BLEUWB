@@ -243,3 +243,40 @@ table.events tr.risk-UNCERTAIN td { color: var(--uncertain); }
 .kpi.warning .kpi-value { color: var(--warning); }
 .kpi.uncertain { border-color: var(--uncertain); }
 .kpi.uncertain .kpi-value { color: var(--uncertain); }
+
+
+/* ===== LIVE UWB ===== */
+.live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.live-grid .panel.wide { grid-column: 1 / -1; }
+
+.serial-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.serial-status { font-size: 13px; font-weight: 600; color: #3a4a5a; min-width: 130px; transition: color .3s; }
+.serial-status.connected { color: #00e08b; }
+.serial-note { font-size: 11px; color: #3a4a5a; margin-top: 4px; line-height: 1.5; }
+
+.live-range-display { display: flex; align-items: baseline; gap: 12px; margin: 14px 0 6px; }
+.live-range-num {
+  font-size: 76px; font-weight: 800; line-height: 1;
+  font-variant-numeric: tabular-nums; letter-spacing: -3px;
+  color: #00c8ff;
+}
+.live-range-unit { font-size: 22px; color: var(--text-dim); }
+
+.live-status-badge {
+  display: inline-block; padding: 3px 14px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+  background: #141b25; color: #3a4a5a;
+  border: 1px solid #1f2a38; margin-bottom: 14px;
+}
+.live-status-badge.ok  { background: rgba(0,224,139,.1); color: #00e08b; border-color: #00e08b; }
+.live-status-badge.err { background: rgba(255,60,60,.1);  color: #ff4c4c; border-color: #ff4c4c; }
+
+.live-stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 4px; }
+.live-stat { display: flex; flex-direction: column; gap: 3px; }
+.live-stat span { font-size: 10px; letter-spacing: 2px; color: var(--text-dim); }
+.live-stat b    { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.live-log { max-height: 180px; }
+.log .ok  { color: #00c8ff; }
+.log .dim { color: #2a3a4a; }
+.log .err { color: #ff4c4c; }
