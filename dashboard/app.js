@@ -170,7 +170,12 @@
     for (var i = 0; i < initial.length; i++) out[initial[i]] = 0;
     return out;
   }
-  // firmwareMode values: "UNKNOWN" | "NEW_DWM3000_V14" | "LEGACY_COMPACT_CSV" | "NO_DATA"
+  // firmwareMode values:
+  //   "UNKNOWN"                      - connected, no valid line yet
+  //   "NORDIC_DIAGNOSTIC_CSV"        - BOOT/IDENTITY with hardware containing 'nRF'
+  //   "NORDIC_LEGACY_COMPACT_CSV"    - compact CSV before any BOOT/IDENTITY (active state)
+  //   "ESP32_DIAGNOSTIC_CSV_DEPRECATED" - BOOT with DWM3000 but no nRF (old ESP32 path)
+  //   "NO_DATA"                      - connected >3s, nothing seen
   var LiveDiag = {
     nodeA: {
       boot: false, configLine: "",
@@ -657,8 +662,13 @@
       LiveDiag[key].identity.hardware = parsed.meta.hardware || null;
       LiveDiag[key].identity.firmware = parsed.meta.firmware || null;
       LiveDiag[key].identity.build    = parsed.meta.build    || null;
-      if (parsed.meta.hardware && parsed.meta.hardware.indexOf("DWM3000") !== -1) {
-        LiveDiag[key].firmwareMode = "NEW_DWM3000_V14";
+      if (parsed.meta.hardware) {
+        var hw = parsed.meta.hardware;
+        if (hw.indexOf("nRF") !== -1 || hw.indexOf("nrf") !== -1) {
+          LiveDiag[key].firmwareMode = "NORDIC_DIAGNOSTIC_CSV";
+        } else if (hw.indexOf("DWM3000") !== -1 || hw.indexOf("ESP32") !== -1) {
+          LiveDiag[key].firmwareMode = "ESP32_DIAGNOSTIC_CSV_DEPRECATED";
+        }
       }
     }
     if (!parsed.isIdentity) {
@@ -684,9 +694,10 @@
     LiveDiag[key].lastEventMs = now;
     LiveDiag[key].lastLineKind = parsed.event;
 
-    // Any event from the new firmware vocabulary confirms it.
-    if (LiveDiag[key].firmwareMode !== "NEW_DWM3000_V14") {
-      LiveDiag[key].firmwareMode = "NEW_DWM3000_V14";
+    // Any new-vocabulary event confirms diagnostic firmware (assume Nordic unless BOOT says otherwise).
+    if (LiveDiag[key].firmwareMode === "UNKNOWN" ||
+        LiveDiag[key].firmwareMode === "NORDIC_LEGACY_COMPACT_CSV") {
+      LiveDiag[key].firmwareMode = "NORDIC_DIAGNOSTIC_CSV";
     }
 
     // Generic counter bump (only for known events; unknown ones are ignored).
@@ -783,9 +794,9 @@
       if (LiveUwb.history.length > LiveUwb.historyMax) LiveUwb.history.shift();
       LiveDiag.nodeA.lastSampleMs = now;
       LiveDiag.nodeA.lastLineKind = "SAMPLE";
-      // Mark as legacy compact CSV if we have NOT yet seen a DWM3000 v1.4 BOOT/IDENTITY
-      if (LiveDiag.nodeA.firmwareMode !== "NEW_DWM3000_V14") {
-        LiveDiag.nodeA.firmwareMode = "LEGACY_COMPACT_CSV";
+      // Mark as Nordic legacy compact CSV if no BOOT/IDENTITY has been seen yet
+      if (LiveDiag.nodeA.firmwareMode === "UNKNOWN") {
+        LiveDiag.nodeA.firmwareMode = "NORDIC_LEGACY_COMPACT_CSV";
       }
     }
 
@@ -1794,9 +1805,10 @@
     // ---- Firmware / Parser Status panel ----
     function fwModeBadge(mode, connected) {
       if (!connected) return '<span class="fw-badge fw-nc">NOT CONNECTED</span>';
-      if (mode === "NEW_DWM3000_V14") return '<span class="fw-badge fw-new">NEW DWM3000 v1.4</span>';
-      if (mode === "LEGACY_COMPACT_CSV") return '<span class="fw-badge fw-leg">LEGACY CSV</span>';
-      if (mode === "NO_DATA") return '<span class="fw-badge fw-nodata">NO DATA</span>';
+      if (mode === "NORDIC_DIAGNOSTIC_CSV")           return '<span class="fw-badge fw-new">NORDIC DIAGNOSTIC</span>';
+      if (mode === "NORDIC_LEGACY_COMPACT_CSV")       return '<span class="fw-badge fw-leg">NORDIC LEGACY CSV</span>';
+      if (mode === "ESP32_DIAGNOSTIC_CSV_DEPRECATED") return '<span class="fw-badge fw-esp32dep">ESP32 DEPRECATED</span>';
+      if (mode === "NO_DATA")                         return '<span class="fw-badge fw-nodata">NO DATA</span>';
       return '<span class="fw-badge fw-unk">UNKNOWN</span>';
     }
     function fmtIdent(node) {
@@ -1849,14 +1861,18 @@
                         (nowMs - LiveDiag.nodeA.lastOkMs) < 3000;
 
     // --- node_A firmware mode advisories ---
-    if (connA && modeA === "LEGACY_COMPACT_CSV") {
-      alerts.push({ text: "node_A is producing legacy compact CSV. Flash the latest DWM3000 v1.4 firmware if per-stage diagnostics are required.", isError: false });
+    if (connA && modeA === "NORDIC_LEGACY_COMPACT_CSV") {
+      alerts.push({ text: "Nordic legacy range-only firmware detected. Per-stage diagnosis requires Nordic diagnostic firmware port. See firmware/UWB_DWM3000_NRF52840/diagnostic_protocol.md.", isError: false });
     }
-    if (connA && modeA !== "NEW_DWM3000_V14" && isRangeActive) {
-      alerts.push({ text: "Range is active, but full diagnostics require latest firmware identity and node_B responder heartbeat. Per-stage diagnosis (TX_POLL / RX_RESP_OK / TX_RESP_DONE / etc.) unavailable.", isError: false });
+    if (connA && modeA === "ESP32_DIAGNOSTIC_CSV_DEPRECATED") {
+      alerts.push({ text: "ESP32 diagnostic firmware detected (deprecated path). The active UWB hardware is Nordic nRF52840 DK + DWM3000. See firmware/UWB_DWM3000_NRF52840/README.md.", isError: true });
+    }
+    var isDiagnosticMode = (modeA === "NORDIC_DIAGNOSTIC_CSV" || modeA === "ESP32_DIAGNOSTIC_CSV_DEPRECATED");
+    if (connA && !isDiagnosticMode && isRangeActive) {
+      alerts.push({ text: "Range is active (Nordic legacy firmware). Cannot determine whether node_B received Poll, transmitted Response, or why node_A missed Response. Per-stage diagnosis unavailable.", isError: false });
     }
     if (connA && (modeA === "UNKNOWN" || modeA === "NO_DATA") && !isRangeActive) {
-      alerts.push({ text: "UWB range is active, but latest DWM3000 v1.4 diagnostic firmware is not confirmed. Reset node_A after connecting to capture BOOT/IDENTITY.", isError: false });
+      alerts.push({ text: "UWB range active but Nordic firmware identity not confirmed. Wait up to 5s for IDENTITY heartbeat, or reset node_A.", isError: false });
     }
 
     // --- node_B heartbeat (only if nodeB port actually open) ---
@@ -1874,8 +1890,8 @@
       }
     }
 
-    // --- 4-rule per-stage diagnosis (new firmware only) ---
-    if (modeA === "NEW_DWM3000_V14") {
+    // --- 4-rule per-stage diagnosis (diagnostic firmware only) ---
+    if (modeA === "NORDIC_DIAGNOSTIC_CSV" || modeA === "ESP32_DIAGNOSTIC_CSV_DEPRECATED") {
       var toA3     = eventCountInWindow("A", "RX_RESP_TIMEOUT",   3000) +
                      eventCountInWindow("A", "RX_RTINFO_TIMEOUT", 3000);
       var rxPollB3 = eventCountInWindow("B", "RX_POLL",           3000);
@@ -1898,10 +1914,10 @@
           restartA10 === 0 && reinitA10 === 0) {
         alerts.push({ text: "Recovery logic not firing: consecutive timeout ≥ " + UWB_TIMEOUT_BURST_ALERT + " but no RX_RESTART / DW_REINIT in last 10s. Verify SOFT_RECOVERY_THRESHOLD / DW_REINIT_THRESHOLD wiring.", isError: true });
       }
-    } else if (modeA === "LEGACY_COMPACT_CSV" &&
+    } else if (modeA === "NORDIC_LEGACY_COMPACT_CSV" &&
                LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT &&
                !isRangeActive) {
-      alerts.push({ text: "Legacy firmware detected. Recovery events cannot be verified because RX_RESTART / DW_REINIT event vocabulary is not available in this firmware.", isError: false });
+      alerts.push({ text: "Nordic legacy firmware: timeout burst detected but recovery events (RX_RESTART / DW_REINIT) are not available in legacy firmware. Per-stage diagnosis requires Nordic diagnostic firmware.", isError: false });
     }
 
     var alertEl = document.getElementById("uwb-diag-alerts");

@@ -1,0 +1,5 @@
+[33m8709f92[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m Improve UWB timeout diagnostics and recovery4
+[33m2951874[m feat: DS-TWR ranging working + Live UWB dashboard
+[33mcc67823[m Add UWB NRF52840 DW3000 firmware, fix Zephyr build on Korean path Windows, and update app views
+[33m4c12f85[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Redesign Driver HMI as nav-style screen + add DWM3000 flash guide
+[33m62b2267[m Broaden .gitignore for dashboard-legacy build artifacts

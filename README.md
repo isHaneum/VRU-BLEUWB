@@ -1,5 +1,20 @@
 # VRU-BLEUWB
 
+## Hardware target correction
+
+> **UWB nodes: Nordic nRF52840 DK + Qorvo DWM3000 shield**
+>
+> The UWB ranging nodes in this project are **Nordic nRF52840 DK boards with a
+> DWM3000 UWB shield**, not ESP32. Flash using J-Link / nRF Connect / west.
+>
+> `firmware/UWB_DWM3000/` contains archived ESP32 Arduino firmware that is
+> **not the active UWB target**. Do not confuse it with the Nordic path.
+> See [firmware/UWB_DWM3000_NRF52840/README.md](firmware/UWB_DWM3000_NRF52840/README.md).
+>
+> BLE scanner / other ESP32 work must not be confused with the UWB ranging nodes.
+
+---
+
 ## BLE-Triggered UWB Ranging and Cooperative Risk Filtering for Occluded VRUs
 
 A research proof-of-concept platform for studying the feasibility of detecting

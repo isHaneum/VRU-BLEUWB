@@ -427,6 +427,7 @@ table.events tr.risk-UNCERTAIN td { color: var(--uncertain); }
 }
 .fw-new    { background: rgba(0,224,139,.15);  color: #00e08b; border: 1px solid #00e08b; }
 .fw-leg    { background: rgba(255,206,58,.15); color: #ffce3a; border: 1px solid #ffce3a; }
+.fw-esp32dep { background: rgba(255,76,76,.12); color: #ff8a8a; border: 1px solid #ff4c4c; }
 .fw-nodata { background: rgba(255,76,76,.10);  color: #ff8a8a; border: 1px solid #ff4c4c; }
 .fw-unk    { background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38; }
 .fw-nc     { background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38; }

@@ -1,4 +1,19 @@
 <#
+################################################################################
+#  DEPRECATED — ESP32 TARGET ONLY
+#
+#  Do NOT use this script for Nordic nRF52840 DK + DWM3000 shield.
+#  The actual UWB nodes in this project are:
+#    Nordic nRF52840 DK + DWM3000 shield
+#  They require the Nordic/J-Link/nRF Connect/west workflow, not esptool.py.
+#
+#  This script only applies to the archived ESP32 + DWM3000 path in:
+#    firmware/UWB_DWM3000/   (ESP32 Arduino .ino, NOT active UWB target)
+#
+#  For Nordic flashing guidance see:
+#    firmware/UWB_DWM3000_NRF52840/README.md
+################################################################################
+
 .SYNOPSIS
     Flash DWM3000 v1.4 initiator and responder firmware to a pair of ESP32 boards.
 
