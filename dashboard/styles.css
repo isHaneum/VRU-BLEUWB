@@ -396,9 +396,41 @@ table.events tr.risk-UNCERTAIN td { color: var(--uncertain); }
   padding: 8px 12px; border-left: 3px solid #ff4c4c; border-radius: 4px;
   margin-bottom: 6px; font-size: 13px; line-height: 1.5;
 }
+.diag-alerts .diag-warn {
+  background: rgba(255,206,58,.10); color: #ffce3a;
+  padding: 8px 12px; border-left: 3px solid #ffce3a; border-radius: 4px;
+  margin-bottom: 6px; font-size: 13px; line-height: 1.5;
+}
 .diag-alerts .diag-ok {
   color: #00e08b; padding: 4px 0; font-size: 12px; letter-spacing: 1px;
 }
+.diag-alerts .diag-dim {
+  color: #3a4a5a; padding: 4px 0; font-size: 12px; letter-spacing: 1px;
+}
+
+/* ===== Firmware / Parser Status panel ===== */
+.fw-status-panel {
+  padding: 10px 12px;
+  background: #0a0f17;
+  border: 1px solid #1a2330;
+  border-radius: 8px;
+}
+.fw-row { display: flex; gap: 32px; flex-wrap: wrap; }
+.fw-col { flex: 1 1 280px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.fw-label { font-size: 10px; letter-spacing: 2px; color: var(--text-dim); margin-bottom: 4px; }
+.fw-ident { font-family: monospace; font-size: 11px; color: #6a8aaa; }
+.fw-ok   { color: #00e08b; }
+.fw-dim  { color: #3a4a5a; }
+.fw-badge {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 1px; width: max-content;
+}
+.fw-new    { background: rgba(0,224,139,.15);  color: #00e08b; border: 1px solid #00e08b; }
+.fw-leg    { background: rgba(255,206,58,.15); color: #ffce3a; border: 1px solid #ffce3a; }
+.fw-nodata { background: rgba(255,76,76,.10);  color: #ff8a8a; border: 1px solid #ff4c4c; }
+.fw-unk    { background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38; }
+.fw-nc     { background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38; }
+
 .diag-section-title {
   font-size: 11px; letter-spacing: 2px; color: var(--text-dim);
   margin: 14px 0 8px 0; text-transform: uppercase;

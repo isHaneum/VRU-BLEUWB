@@ -93,6 +93,8 @@ static uint32_t  lastPollSeenMs     = 0;
 static uint32_t  lastWatchdogSoftMs = 0;
 static uint32_t  stageStartMs       = 0;
 static uint32_t  reinitCount        = 0;
+static uint32_t  lastIdentityMs     = 0;
+#define IDENTITY_INTERVAL_MS 5000
 static bool      rxArmedLogged      = false;
 static uint8_t   currentSeq         = 0;   // seq_id of the in-flight TWR cycle
 
@@ -117,8 +119,10 @@ static void emitReinit(const char* reason) {
                   millis(), NODE_ID, reason, reinitCount);
 }
 
-static void emitBootBanner() {
-    Serial.print("node_B,BOOT,RESPONDER,hardware=DWM3000_v1.4,firmware=uwb_responder.ino,build=");
+static void emitIdentity(bool isBoot) {
+    const char* tag = isBoot ? "BOOT" : "IDENTITY";
+    Serial.print("node_B,"); Serial.print(tag);
+    Serial.print(",RESPONDER,hardware=DWM3000_v1.4,firmware=uwb_responder.ino,build=");
     Serial.print(__DATE__); Serial.print(" "); Serial.println(__TIME__);
     Serial.printf(
         "node_B,CONFIG,profile=%s,channel=5,pan=0x1234,addr=0xB001,peer=0xA001,"
@@ -130,7 +134,10 @@ static void emitBootBanner() {
         (unsigned) WATCHDOG_SOFT_MS,
         (unsigned) WATCHDOG_REINIT_MS,
         (unsigned) TX_RESP_LATE_MS);
+    lastIdentityMs = millis();
 }
+
+static void emitBootBanner() { emitIdentity(true); }
 
 // ---------------------- DW3000 lifecycle ----------------------
 static void applyConfiguration() {
@@ -215,6 +222,11 @@ void loop() {
     uint32_t now = millis();
     heartbeatTick(now);
     watchdogTick(now);
+
+    // Periodic IDENTITY heartbeat so dashboards connecting after boot still see firmware version.
+    if (currStage == 0 && now - lastIdentityMs >= IDENTITY_INTERVAL_MS) {
+        emitIdentity(false);
+    }
 
     switch (currStage) {
         case 0: {

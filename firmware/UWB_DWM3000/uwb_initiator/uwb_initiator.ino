@@ -93,6 +93,8 @@ static uint32_t  seqId        = 0;        // 32-bit logical seq; on-air = seqId 
 static uint32_t  stageStartMs = 0;
 static uint32_t  consecutiveTimeout = 0;
 static uint32_t  reinitCount        = 0;
+static uint32_t  lastIdentityMs     = 0;
+#define IDENTITY_INTERVAL_MS 5000
 
 static inline uint32_t msSince(uint32_t t0) { return millis() - t0; }
 static inline uint8_t  seqByte()            { return (uint8_t)(seqId & 0xFF); }
@@ -123,12 +125,13 @@ static void emitReinit(const char* reason) {
                   millis(), NODE_ID, reason, reinitCount);
 }
 
-static void emitBootBanner() {
-    // The dashboard parser ignores the legacy header but Serial Monitor users find it useful.
+static void emitIdentity(bool isBoot) {
+    const char* tag = isBoot ? "BOOT" : "IDENTITY";
 #if !RAW_UWB_TEST_MODE
-    Serial.println("timestamp_ms,node_id,seq_id,range_m,status");
+    if (isBoot) Serial.println("timestamp_ms,node_id,seq_id,range_m,status");
 #endif
-    Serial.print("node_A,BOOT,INITIATOR,hardware=DWM3000_v1.4,firmware=uwb_initiator.ino,build=");
+    Serial.print("node_A,"); Serial.print(tag);
+    Serial.print(",INITIATOR,hardware=DWM3000_v1.4,firmware=uwb_initiator.ino,build=");
     Serial.print(__DATE__); Serial.print(" "); Serial.println(__TIME__);
     Serial.printf(
         "node_A,CONFIG,profile=%s,channel=5,pan=0x1234,addr=0xA001,peer=0xB001,"
@@ -140,7 +143,10 @@ static void emitBootBanner() {
         (unsigned) WAIT_RX_RTINFO_TIMEOUT_MS,
         (unsigned) SOFT_RECOVERY_THRESHOLD,
         (unsigned) DW_REINIT_THRESHOLD);
+    lastIdentityMs = millis();
 }
+
+static void emitBootBanner() { emitIdentity(true); }
 
 // ---------------------- DW3000 lifecycle ----------------------
 static void applyConfiguration() {
@@ -235,6 +241,11 @@ void setup() {
 }
 
 void loop() {
+    // Periodic IDENTITY heartbeat so dashboards connecting after boot still see firmware version.
+    if (currStage == 0 && millis() - lastIdentityMs >= IDENTITY_INTERVAL_MS) {
+        emitIdentity(false);
+    }
+
     switch (currStage) {
         case 0:
             // ----- Stage 0: send POLL with seq_id embedded in senderID byte -----

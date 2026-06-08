@@ -170,24 +170,34 @@
     for (var i = 0; i < initial.length; i++) out[initial[i]] = 0;
     return out;
   }
+  // firmwareMode values: "UNKNOWN" | "NEW_DWM3000_V14" | "LEGACY_COMPACT_CSV" | "NO_DATA"
   var LiveDiag = {
     nodeA: {
       boot: false, configLine: "",
       identity: { hardware: null, firmware: null, build: null },
+      firmwareMode: "UNKNOWN",   // set by parser
+      connectedSinceMs: null,    // performance.now() at port open
+      lastLineKind: null,        // most recent parsed line kind for UI
       role: null,
       reinitCount: 0,
       consecutiveTimeout: 0,
       lastOkMs: null, lastTimeoutMs: null, lastSampleMs: null,
       lastTxPollMs: null, lastRangeOkMs: null,
+      // new-vocabulary counters (NEW_DWM3000_V14 only)
       counters: makeCounters([
         "TX_POLL", "RX_RESP_OK", "RX_RESP_TIMEOUT", "RX_RESP_ERR",
         "TX_FINAL", "RX_RTINFO_OK", "RX_RTINFO_TIMEOUT",
         "RANGE_OK", "RX_RESTART", "DW_REINIT",
       ]),
+      // legacy-vocabulary counters (also incremented for combined display)
+      legacyCounters: makeCounters(["RANGE_OK", "RX_RESP_TIMEOUT", "RX_RESP_ERR"]),
     },
     nodeB: {
       boot: false, configLine: "",
       identity: { hardware: null, firmware: null, build: null },
+      firmwareMode: "UNKNOWN",
+      connectedSinceMs: null,
+      lastLineKind: null,
       role: null,
       reinitCount: 0,
       heartbeatSeen: false,
@@ -202,6 +212,7 @@
         "RX_FINAL_OK", "RX_FINAL_TIMEOUT",
         "TX_RTINFO_DONE", "RX_ERR", "RX_RESTART", "DW_REINIT",
       ]),
+      legacyCounters: makeCounters([]),
     },
     // Event timeline for status chart and rate calc.
     // Each item: { ts: performance.now(), node: 'A'|'B', type: 'OK'|'TIMEOUT'|'ERR'|'RESTART'|'REINIT', label: string }
@@ -558,15 +569,15 @@
 
     var p = line.split(",").map(function (s) { return s.trim(); });
 
-    // BOOT / CONFIG / FATAL banners may omit the timestamp prefix per spec.
-    if (p.length >= 3 && /^node_/i.test(p[0]) && p[1] === "BOOT") {
+    // BOOT / IDENTITY / CONFIG / FATAL banners may omit the timestamp prefix per spec.
+    if (p.length >= 3 && /^node_/i.test(p[0]) && (p[1] === "BOOT" || p[1] === "IDENTITY")) {
       // Extract optional identity k=v's: hardware, firmware, build
       var bootMeta = {};
       for (var bi = 3; bi < p.length; bi++) {
         var bkv = p[bi].split("=");
         if (bkv.length >= 2) bootMeta[bkv[0]] = bkv.slice(1).join("=");
       }
-      return { kind: "boot", node_id: p[0], role: p[2], meta: bootMeta };
+      return { kind: "boot", node_id: p[0], role: p[2], meta: bootMeta, isIdentity: p[1] === "IDENTITY" };
     }
     if (p.length >= 3 && /^node_/i.test(p[0]) && p[1] === "CONFIG") {
       return { kind: "config", node_id: p[0], config: p.slice(2).join(",") };
@@ -641,12 +652,18 @@
     var key = nodeKeyOf(parsed.node_id);
     LiveDiag[key].boot = true;
     LiveDiag[key].role = parsed.role || null;
+    LiveDiag[key].lastLineKind = "BOOT";
     if (parsed.meta) {
       LiveDiag[key].identity.hardware = parsed.meta.hardware || null;
       LiveDiag[key].identity.firmware = parsed.meta.firmware || null;
       LiveDiag[key].identity.build    = parsed.meta.build    || null;
+      if (parsed.meta.hardware && parsed.meta.hardware.indexOf("DWM3000") !== -1) {
+        LiveDiag[key].firmwareMode = "NEW_DWM3000_V14";
+      }
     }
-    pushDiagEvent(key === "nodeA" ? "A" : "B", "RESTART", "BOOT");
+    if (!parsed.isIdentity) {
+      pushDiagEvent(key === "nodeA" ? "A" : "B", "RESTART", "BOOT");
+    }
   }
   function handleUwbConfig(parsed) {
     var key = nodeKeyOf(parsed.node_id);
@@ -665,6 +682,12 @@
     var key = nodeKeyOf(parsed.node_id);
     var slot = key === "nodeA" ? "A" : "B";
     LiveDiag[key].lastEventMs = now;
+    LiveDiag[key].lastLineKind = parsed.event;
+
+    // Any event from the new firmware vocabulary confirms it.
+    if (LiveDiag[key].firmwareMode !== "NEW_DWM3000_V14") {
+      LiveDiag[key].firmwareMode = "NEW_DWM3000_V14";
+    }
 
     // Generic counter bump (only for known events; unknown ones are ignored).
     if (LiveDiag[key].counters &&
@@ -759,6 +782,11 @@
       LiveUwb.history.push({ ts: now, range: s.range_m, status: s.status, node: node });
       if (LiveUwb.history.length > LiveUwb.historyMax) LiveUwb.history.shift();
       LiveDiag.nodeA.lastSampleMs = now;
+      LiveDiag.nodeA.lastLineKind = "SAMPLE";
+      // Mark as legacy compact CSV if we have NOT yet seen a DWM3000 v1.4 BOOT/IDENTITY
+      if (LiveDiag.nodeA.firmwareMode !== "NEW_DWM3000_V14") {
+        LiveDiag.nodeA.firmwareMode = "LEGACY_COMPACT_CSV";
+      }
     }
 
     if (s.status === "OK" && s.range_m != null) {
@@ -775,6 +803,8 @@
       if (primary) {
         LiveDiag.nodeA.lastOkMs = now;
         LiveDiag.nodeA.consecutiveTimeout = 0;
+        LiveDiag.nodeA.legacyCounters.RANGE_OK++;
+        pushEventLog("A", "RANGE_OK");
         pushDiagEvent("A", "OK", "OK");
       }
     } else {
@@ -782,12 +812,18 @@
       if (primary) {
         if (s.status === "RX_RESP_TIMEOUT") {
           LiveDiag.nodeA.lastTimeoutMs = now;
+          LiveDiag.nodeA.legacyCounters.RX_RESP_TIMEOUT++;
+          pushEventLog("A", "RX_RESP_TIMEOUT");
           if (typeof s.consecutive_timeout === "number") {
             LiveDiag.nodeA.consecutiveTimeout = s.consecutive_timeout;
           } else {
             LiveDiag.nodeA.consecutiveTimeout++;
           }
           pushDiagEvent("A", "TIMEOUT", "RX_RESP_TIMEOUT");
+        } else if (s.status === "RX_RESP_ERR") {
+          LiveDiag.nodeA.legacyCounters.RX_RESP_ERR++;
+          pushEventLog("A", "RX_RESP_ERR");
+          pushDiagEvent("A", "ERR", "RX_RESP_ERR");
         } else if (s.status === "RX_RESTART") {
           pushDiagEvent("A", "RESTART", "RX_RESTART");
         } else if (s.status === "DW_REINIT") {
@@ -805,10 +841,15 @@
   function connectUwb(slot) {
     return genericOpenPort().then(function (port) {
       var reader = port.readable.getReader();
+      var connNow = performance.now();
       if (slot === "A") {
         LiveUwb.portA = port; LiveUwb.readerA = reader; LiveUwb.connectedA = true;
+        LiveDiag.nodeA.connectedSinceMs = connNow;
+        LiveDiag.nodeA.firmwareMode = "UNKNOWN";
       } else {
         LiveUwb.portB = port; LiveUwb.readerB = reader; LiveUwb.connectedB = true;
+        LiveDiag.nodeB.connectedSinceMs = connNow;
+        LiveDiag.nodeB.firmwareMode = "UNKNOWN";
       }
       setSerialUI("uwb-" + slot.toLowerCase(), true);
       liveLog("[UWB " + slot + "] connected at 115200", "ok");
@@ -852,8 +893,13 @@
   function disconnectUwb(slot, fromError) {
     var reader = slot === "A" ? LiveUwb.readerA : LiveUwb.readerB;
     if (reader && !fromError) reader.cancel().catch(function () {});
-    if (slot === "A") { LiveUwb.readerA = null; LiveUwb.portA = null; LiveUwb.connectedA = false; }
-    else              { LiveUwb.readerB = null; LiveUwb.portB = null; LiveUwb.connectedB = false; }
+    if (slot === "A") {
+      LiveUwb.readerA = null; LiveUwb.portA = null; LiveUwb.connectedA = false;
+      LiveDiag.nodeA.connectedSinceMs = null;
+    } else {
+      LiveUwb.readerB = null; LiveUwb.portB = null; LiveUwb.connectedB = false;
+      LiveDiag.nodeB.connectedSinceMs = null;
+    }
     setSerialUI("uwb-" + slot.toLowerCase(), false);
   }
 
@@ -1685,6 +1731,10 @@
       var el = document.getElementById(id);
       if (el) el.textContent = val;
     }
+    function setHTML(id, html) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = html;
+    }
     function setBadge(id, cls, text) {
       var el = document.getElementById(id);
       if (!el) return;
@@ -1718,23 +1768,37 @@
     set("uwb-last-valid-range", LiveUwb.lastValidRangeM != null ? LiveUwb.lastValidRangeM.toFixed(3) + " m" : "—");
     set("uwb-last-valid-age",   lastValidAge != null ? lastValidAge.toFixed(1) + " s" : "—");
 
-    // ---- DWM3000 v1.4 per-event counters (cumulative since boot) ----
-    var ca = LiveDiag.nodeA.counters || {};
-    var cb = LiveDiag.nodeB.counters || {};
-    set("uwb-cnt-a-tx-poll",          String(ca.TX_POLL          || 0));
-    set("uwb-cnt-a-rx-resp-to",       String(ca.RX_RESP_TIMEOUT  || 0));
-    set("uwb-cnt-a-rx-rtinfo-to",     String(ca.RX_RTINFO_TIMEOUT|| 0));
-    set("uwb-cnt-a-range-ok",         String(ca.RANGE_OK         || 0));
-    set("uwb-cnt-a-rx-restart",       String(ca.RX_RESTART       || 0));
-    set("uwb-cnt-a-dw-reinit",        String(ca.DW_REINIT        || 0));
-    set("uwb-cnt-b-rx-poll",          String(cb.RX_POLL          || 0));
-    set("uwb-cnt-b-tx-resp-done",     String(cb.TX_RESP_DONE     || 0));
-    set("uwb-cnt-b-tx-resp-late",     String(cb.TX_RESP_LATE     || 0));
-    set("uwb-cnt-b-rx-final-ok",      String(cb.RX_FINAL_OK      || 0));
-    set("uwb-cnt-b-rx-final-to",      String(cb.RX_FINAL_TIMEOUT || 0));
-    set("uwb-cnt-b-tx-rtinfo-done",   String(cb.TX_RTINFO_DONE   || 0));
+    // ---- per-event counters: new + legacy combined ----
+    var ca  = LiveDiag.nodeA.counters || {};
+    var cal = LiveDiag.nodeA.legacyCounters || {};
+    var cb  = LiveDiag.nodeB.counters || {};
 
-    // ---- Identity (hardware/firmware/build) banners ----
+    function combined(newVal, legVal) {
+      var n = newVal || 0, l = legVal || 0, t = n + l;
+      if (l > 0) return t + " <small>new=" + n + " legacy=" + l + "</small>";
+      return String(t);
+    }
+    setHTML("uwb-cnt-a-tx-poll",      String(ca.TX_POLL          || 0));
+    setHTML("uwb-cnt-a-rx-resp-to",   combined(ca.RX_RESP_TIMEOUT,   cal.RX_RESP_TIMEOUT));
+    setHTML("uwb-cnt-a-rx-rtinfo-to", String(ca.RX_RTINFO_TIMEOUT|| 0));
+    setHTML("uwb-cnt-a-range-ok",     combined(ca.RANGE_OK,          cal.RANGE_OK));
+    setHTML("uwb-cnt-a-rx-restart",   String(ca.RX_RESTART       || 0));
+    setHTML("uwb-cnt-a-dw-reinit",    String(ca.DW_REINIT        || 0));
+    setHTML("uwb-cnt-b-rx-poll",      String(cb.RX_POLL          || 0));
+    setHTML("uwb-cnt-b-tx-resp-done", String(cb.TX_RESP_DONE     || 0));
+    setHTML("uwb-cnt-b-tx-resp-late", String(cb.TX_RESP_LATE     || 0));
+    setHTML("uwb-cnt-b-rx-final-ok",  String(cb.RX_FINAL_OK      || 0));
+    setHTML("uwb-cnt-b-rx-final-to",  String(cb.RX_FINAL_TIMEOUT || 0));
+    setHTML("uwb-cnt-b-tx-rtinfo-done", String(cb.TX_RTINFO_DONE || 0));
+
+    // ---- Firmware / Parser Status panel ----
+    function fwModeBadge(mode, connected) {
+      if (!connected) return '<span class="fw-badge fw-nc">NOT CONNECTED</span>';
+      if (mode === "NEW_DWM3000_V14") return '<span class="fw-badge fw-new">NEW DWM3000 v1.4</span>';
+      if (mode === "LEGACY_COMPACT_CSV") return '<span class="fw-badge fw-leg">LEGACY CSV</span>';
+      if (mode === "NO_DATA") return '<span class="fw-badge fw-nodata">NO DATA</span>';
+      return '<span class="fw-badge fw-unk">UNKNOWN</span>';
+    }
     function fmtIdent(node) {
       var id = LiveDiag[node].identity || {};
       var parts = [];
@@ -1743,64 +1807,124 @@
       if (id.build)    parts.push("build " + id.build);
       return parts.length ? parts.join(" · ") : "—";
     }
-    set("uwb-ident-a", fmtIdent("nodeA"));
-    set("uwb-ident-b", fmtIdent("nodeB"));
+    var connA = !!LiveUwb.connectedA, connB = !!LiveUwb.connectedB;
+    var modeA = LiveDiag.nodeA.firmwareMode, modeB = LiveDiag.nodeB.firmwareMode;
+    var identA = fmtIdent("nodeA"), identB = fmtIdent("nodeB");
 
-    // ---- Diagnostic alert strings (4-rule diagnosis per spec) ----
-    var alerts = [];
-    if (LiveUwb.connectedA && !hb) {
-      alerts.push("node_B serial port may be open, but responder heartbeat (READY @1Hz) is not detected.");
+    // Check NO_DATA: connected for >3s but nothing seen
+    if (connA && LiveDiag.nodeA.connectedSinceMs && !LiveDiag.nodeA.lastSampleMs && !LiveDiag.nodeA.lastEventMs) {
+      if ((nowMs - LiveDiag.nodeA.connectedSinceMs) > 3000) modeA = "NO_DATA";
+    }
+    if (connB && LiveDiag.nodeB.connectedSinceMs && !LiveDiag.nodeB.lastPollMs && !LiveDiag.nodeB.lastReadyMs && !LiveDiag.nodeB.lastEventMs) {
+      if ((nowMs - LiveDiag.nodeB.connectedSinceMs) > 3000) modeB = "NO_DATA";
     }
 
-    var toA3      = eventCountInWindow("A", "RX_RESP_TIMEOUT",  3000) +
-                    eventCountInWindow("A", "RX_RTINFO_TIMEOUT", 3000);
-    var rxPollB3  = eventCountInWindow("B", "RX_POLL",          3000);
-    var txDoneB3  = eventCountInWindow("B", "TX_RESP_DONE",     3000);
-    var txLateB3  = eventCountInWindow("B", "TX_RESP_LATE",     3000);
-    var restartA10 = eventCountInWindow("A", "RX_RESTART", 10000);
-    var reinitA10  = eventCountInWindow("A", "DW_REINIT",  10000);
+    var sinceHb = LiveDiag.nodeB.lastReadyMs ? ((nowMs - LiveDiag.nodeB.lastReadyMs) / 1000).toFixed(1) + " s ago" : "—";
+    var fwHTML =
+      '<div class="fw-row">' +
+        '<div class="fw-col">' +
+          '<div class="fw-label">node_A (Initiator)</div>' +
+          '<div>Serial: <b>' + (connA ? '<span class="fw-ok">CONNECTED</span>' : '<span class="fw-dim">DISCONNECTED</span>') + '</b></div>' +
+          '<div>Firmware: ' + fwModeBadge(modeA, connA) + '</div>' +
+          '<div>Identity: <span class="fw-ident">' + identA + '</span></div>' +
+          '<div>Last line: <b>' + (LiveDiag.nodeA.lastLineKind || "—") + '</b></div>' +
+        '</div>' +
+        '<div class="fw-col">' +
+          '<div class="fw-label">node_B (Responder)</div>' +
+          '<div>Serial: <b>' + (connB ? '<span class="fw-ok">CONNECTED</span>' : '<span class="fw-dim">DISCONNECTED</span>') + '</b></div>' +
+          '<div>Firmware: ' + fwModeBadge(modeB, connB) + '</div>' +
+          '<div>Identity: <span class="fw-ident">' + identB + '</span></div>' +
+          '<div>READY hb: <b>' + (hb ? '<span class="fw-ok">YES</span>' : '<span class="fw-dim">NO</span>') + '</b> &nbsp; ' + sinceHb + '</div>' +
+        '</div>' +
+      '</div>';
+    setHTML("uwb-fw-status", fwHTML);
 
-    if (toA3 > 0 && rxPollB3 === 0) {
-      alerts.push("Diagnosis: node_A is timing out but node_B reports no RX_POLL in the last 3s. " +
-                  "Poll is not reaching the responder OR responder RX is not armed " +
-                  "(check antenna, channel/PAN, distance, obstruction, role assignment).");
-    } else if (toA3 > 0 && rxPollB3 > 0 && txDoneB3 === 0) {
-      var lateNote = txLateB3 > 0 ? " (" + txLateB3 + " TX_RESP_LATE events observed)" : "";
-      alerts.push("Diagnosis: responder receives Poll but fails to TX a clean Response" + lateNote +
-                  ". Likely delayed-TX margin / SPI stall on node_B.");
-    } else if (toA3 > 0 && txDoneB3 > 0) {
-      alerts.push("Diagnosis: responder transmitted Response (TX_RESP_DONE seen) but initiator missed it. " +
-                  "Check node_A RX timeout, RX timing window, antenna orientation, or RF interference.");
+    // ---- Identity (for legacy inline display) ----
+    set("uwb-ident-a", identA);
+    set("uwb-ident-b", identB);
+
+    // ---- Diagnostic alerts (truthful rules) ----
+    var alerts = [];    // { text, isError }  — isError=false → yellow warning
+    var isRangeActive = LiveDiag.nodeA.lastOkMs != null &&
+                        (nowMs - LiveDiag.nodeA.lastOkMs) < 3000;
+
+    // --- node_A firmware mode advisories ---
+    if (connA && modeA === "LEGACY_COMPACT_CSV") {
+      alerts.push({ text: "node_A is producing legacy compact CSV. Flash the latest DWM3000 v1.4 firmware if per-stage diagnostics are required.", isError: false });
+    }
+    if (connA && modeA !== "NEW_DWM3000_V14" && isRangeActive) {
+      alerts.push({ text: "Range is active, but full diagnostics require latest firmware identity and node_B responder heartbeat. Per-stage diagnosis (TX_POLL / RX_RESP_OK / TX_RESP_DONE / etc.) unavailable.", isError: false });
+    }
+    if (connA && (modeA === "UNKNOWN" || modeA === "NO_DATA") && !isRangeActive) {
+      alerts.push({ text: "UWB range is active, but latest DWM3000 v1.4 diagnostic firmware is not confirmed. Reset node_A after connecting to capture BOOT/IDENTITY.", isError: false });
     }
 
-    if (LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT &&
-        restartA10 === 0 && reinitA10 === 0) {
-      alerts.push("Recovery logic not firing: consecutive timeout is high but no RX_RESTART / DW_REINIT " +
-                  "was emitted in the last 10s. Verify SOFT_RECOVERY_THRESHOLD / DW_REINIT_THRESHOLD wiring.");
+    // --- node_B heartbeat (only if nodeB port actually open) ---
+    var connBSince = LiveDiag.nodeB.connectedSinceMs;
+    var bConnected3s = connB && connBSince && (nowMs - connBSince) > 3000;
+    if (!connB) {
+      if (modeA === "NEW_DWM3000_V14") {
+        alerts.push({ text: "node_B not connected. Connect responder serial or run node_B independently for full two-node diagnosis.", isError: false });
+      }
+    } else if (bConnected3s && !LiveDiag.nodeB.lastReadyMs) {
+      if (modeB === "NEW_DWM3000_V14") {
+        alerts.push({ text: "node_B serial port is open, but no READY heartbeat detected in 3 s. Check node_B responder firmware and wiring.", isError: true });
+      } else {
+        alerts.push({ text: "node_B connected, but no DWM3000 v1.4 responder identity or READY heartbeat has been observed. Reset node_B after connecting or re-flash responder firmware.", isError: false });
+      }
     }
-    if (LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT &&
-        (restartA10 > 0 || reinitA10 > 0)) {
-      alerts.push("Serial connection is active, but the UWB responder is not replying despite recovery attempts. " +
-                  "Check node_B responder firmware, role assignment, PAN/address/channel settings, " +
-                  "timing, antenna placement, and recovery logic.");
+
+    // --- 4-rule per-stage diagnosis (new firmware only) ---
+    if (modeA === "NEW_DWM3000_V14") {
+      var toA3     = eventCountInWindow("A", "RX_RESP_TIMEOUT",   3000) +
+                     eventCountInWindow("A", "RX_RTINFO_TIMEOUT", 3000);
+      var rxPollB3 = eventCountInWindow("B", "RX_POLL",           3000);
+      var txDoneB3 = eventCountInWindow("B", "TX_RESP_DONE",      3000);
+      var txLateB3 = eventCountInWindow("B", "TX_RESP_LATE",      3000);
+      var restartA10 = eventCountInWindow("A", "RX_RESTART", 10000);
+      var reinitA10  = eventCountInWindow("A", "DW_REINIT",  10000);
+
+      if (toA3 > 0 && rxPollB3 === 0) {
+        alerts.push({ text: "Diagnosis: node_A is timing out but node_B reports no RX_POLL in the last 3s. Poll is not reaching the responder OR responder RX is not armed (check antenna, channel/PAN, distance, obstruction, role assignment).", isError: true });
+      } else if (toA3 > 0 && rxPollB3 > 0 && txDoneB3 === 0) {
+        var lateNote = txLateB3 > 0 ? " (" + txLateB3 + " TX_RESP_LATE observed)" : "";
+        alerts.push({ text: "Diagnosis: responder receives Poll but fails to TX a clean Response" + lateNote + ". Likely delayed-TX margin / SPI stall on node_B.", isError: true });
+      } else if (toA3 > 0 && txDoneB3 > 0) {
+        alerts.push({ text: "Diagnosis: responder transmitted Response (TX_RESP_DONE seen) but initiator missed it. Check node_A RX timeout, RX timing window, antenna orientation, or RF interference.", isError: true });
+      }
+
+      if (!isRangeActive &&
+          LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT &&
+          restartA10 === 0 && reinitA10 === 0) {
+        alerts.push({ text: "Recovery logic not firing: consecutive timeout ≥ " + UWB_TIMEOUT_BURST_ALERT + " but no RX_RESTART / DW_REINIT in last 10s. Verify SOFT_RECOVERY_THRESHOLD / DW_REINIT_THRESHOLD wiring.", isError: true });
+      }
+    } else if (modeA === "LEGACY_COMPACT_CSV" &&
+               LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT &&
+               !isRangeActive) {
+      alerts.push({ text: "Legacy firmware detected. Recovery events cannot be verified because RX_RESTART / DW_REINIT event vocabulary is not available in this firmware.", isError: false });
     }
+
     var alertEl = document.getElementById("uwb-diag-alerts");
     if (alertEl) {
       if (alerts.length) {
         alertEl.innerHTML = alerts.map(function (a) {
-          return "<div class=\"diag-alert\">" + a + "</div>";
+          return '<div class="' + (a.isError ? "diag-alert" : "diag-warn") + '">' + a.text + '</div>';
         }).join("");
+      } else if (isRangeActive) {
+        alertEl.innerHTML = '<div class="diag-ok">Range active. No diagnostic anomalies detected.</div>';
+      } else if (connA || connB) {
+        alertEl.innerHTML = '<div class="diag-ok">No diagnostic anomalies detected.</div>';
       } else {
-        alertEl.innerHTML = "<div class=\"diag-ok\">No diagnostic anomalies detected.</div>";
+        alertEl.innerHTML = '<div class="diag-dim">Connect node_A serial to start live diagnostics.</div>';
       }
     }
 
     var cfgEl = document.getElementById("uwb-config-line");
     if (cfgEl) {
-      var parts = [];
-      if (LiveDiag.nodeA.configLine) parts.push("A: " + LiveDiag.nodeA.configLine);
-      if (LiveDiag.nodeB.configLine) parts.push("B: " + LiveDiag.nodeB.configLine);
-      cfgEl.textContent = parts.length ? parts.join("  |  ") : "—";
+      var cfgParts = [];
+      if (LiveDiag.nodeA.configLine) cfgParts.push("A: " + LiveDiag.nodeA.configLine);
+      if (LiveDiag.nodeB.configLine) cfgParts.push("B: " + LiveDiag.nodeB.configLine);
+      cfgEl.textContent = cfgParts.length ? cfgParts.join("  |  ") : "—";
     }
   }
 
