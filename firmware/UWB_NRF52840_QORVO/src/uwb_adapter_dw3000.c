@@ -107,15 +107,45 @@ static const struct gpio_dt_spec g_wak = GPIO_DT_SPEC_GET_OR(DW3000_NODE, wakeup
 /* Antenna delay applied to both TX and RX paths */
 #define ANTENNA_DELAY      0x3FCA
 
-/* Timeouts */
+/* Timeouts — ROBUST profile uses longer RX window for obstructed environments */
 #define TX_TIMEOUT_US      5000    /* 5 ms for TX done */
-#define RX_TIMEOUT_US      10000   /* 10 ms for RX frame */
+#if defined(CONFIG_VLOS_UWB_PROFILE_ROBUST) && (CONFIG_VLOS_UWB_PROFILE_ROBUST == 1)
+#define RX_TIMEOUT_US      60000   /* 60 ms — ROBUST profile */
+#else
+#define RX_TIMEOUT_US      30000   /* 30 ms — FAST profile */
+#endif
 #define POLL_SLEEP_US      50
 
 /* -----------------------------------------------------------------------
  * Role flag set by uwb_adapter_init()
  * ----------------------------------------------------------------------- */
 static bool g_is_initiator;
+
+/* -----------------------------------------------------------------------
+ * Diagnostic callback infrastructure
+ * ----------------------------------------------------------------------- */
+static uwb_diag_cb_t g_diag_cb;
+static uint32_t      g_diag_seq;  /* monotonically incremented per initiator step */
+static uint8_t       g_rx_seq;    /* seq byte echoed from received Poll frame */
+
+void uwb_adapter_set_diag_cb(uwb_diag_cb_t cb)
+{
+    g_diag_cb = cb;
+}
+
+static inline void fire_cb(enum uwb_diag_event evt, float range_m,
+                           uint32_t elapsed_ms)
+{
+    if (!g_diag_cb) {
+        return;
+    }
+    struct uwb_diag_extra ex = {
+        .seq_id     = g_is_initiator ? g_diag_seq : (uint32_t)g_rx_seq,
+        .range_m    = range_m,
+        .elapsed_ms = elapsed_ms,
+    };
+    g_diag_cb(evt, &ex);
+}
 
 /* -----------------------------------------------------------------------
  * Low-level SPI helpers
@@ -331,11 +361,12 @@ static void do_rx_enable(void)
  * DS-TWR frame builders
  * ----------------------------------------------------------------------- */
 
-/* Write a standard 4-byte DS-TWR frame into TX buffer */
-static void write_std_frame(uint8_t stage)
+/* Write a standard 4-byte DS-TWR frame into TX buffer.
+ * seq is placed in the SRC byte (offset 0x01) for dashboard correlation. */
+static void write_std_frame(uint8_t stage, uint8_t seq)
 {
     dw_write8(REG_TX_BUF, FRAME_OFFSET_MODE,  DS_TWR_MODE);
-    dw_write8(REG_TX_BUF, FRAME_OFFSET_SRC,   0x00);
+    dw_write8(REG_TX_BUF, FRAME_OFFSET_SRC,   seq);
     dw_write8(REG_TX_BUF, FRAME_OFFSET_DST,   0x00);
     dw_write8(REG_TX_BUF, FRAME_OFFSET_STAGE, stage);
     set_frame_length(4);
@@ -357,6 +388,12 @@ static void write_rtinfo_frame(int32_t t_round_b, int32_t t_reply_b)
 static uint8_t get_rx_stage(void)
 {
     return dw_read8(REG_RX_BUF0, FRAME_OFFSET_STAGE) & 0x07U;
+}
+
+/* Read seq byte from RX buffer SRC field (seq propagation) */
+static uint8_t get_rx_seq(void)
+{
+    return dw_read8(REG_RX_BUF0, FRAME_OFFSET_SRC);
 }
 
 /* -----------------------------------------------------------------------
@@ -770,17 +807,19 @@ int uwb_adapter_init(bool initiator_role)
 
 /* -----------------------------------------------------------------------
  * Initiator: executes one full DS-TWR exchange (Poll→Resp→Final→RTinfo)
+ * Diagnostic callback fires at each stage; seq propagated via SRC byte.
  * ----------------------------------------------------------------------- */
 static int initiator_step(struct uwb_measurement *m)
 {
     int rc;
+    uint8_t seq_byte = (uint8_t)(g_diag_seq & 0xFFU);
 
     /* Reset transceiver to IDLE and clear any leftover status from prior cycle */
     fast_cmd(0x00);          /* CMD_TXRXOFF */
     clear_status();
 
-    /* ----- Stage 0: Send Poll (stage=1) ----- */
-    write_std_frame(1);
+    /* ----- Stage 0: Send Poll (stage=1, seq embedded in SRC byte) ----- */
+    write_std_frame(1, seq_byte);
     do_tx_w4r();
 
     rc = wait_tx_done();
@@ -792,51 +831,72 @@ static int initiator_step(struct uwb_measurement *m)
             n++;
         }
         m->status = "TX_POLL_ERR";
+        g_diag_seq++;
         return 0;
     }
     uint64_t tx_ts_poll = read_tx_ts();
     clear_status();
+    fire_cb(UWB_EVT_TX_POLL, 0.0f, 0);
 
     /* ----- Stage 1: Wait for Response (stage=2) ----- */
     rc = wait_rx_frame();
     if (rc < 0) {
-        m->status = (rc == -ETIMEDOUT) ? "RX_RESP_TIMEOUT" : "RX_RESP_ERR";
+        if (rc == -ETIMEDOUT) {
+            fire_cb(UWB_EVT_RX_RESP_TIMEOUT, 0.0f, 0);
+            m->status = "RX_RESP_TIMEOUT";
+        } else {
+            fire_cb(UWB_EVT_RX_RESP_ERR, 0.0f, 0);
+            m->status = "RX_RESP_ERR";
+        }
         clear_status();
         do_rx_enable();
+        g_diag_seq++;
         return 0;
     }
     if (get_rx_stage() != 2) {
+        fire_cb(UWB_EVT_RX_RESP_ERR, 0.0f, 0);
         m->status = "BAD_STAGE_RESP";
         clear_status();
         do_rx_enable();
+        g_diag_seq++;
         return 0;
     }
+    fire_cb(UWB_EVT_RX_RESP_OK, 0.0f, 0);
     uint64_t rx_ts_resp = read_rx_ts();
     clear_status();
 
     /* ----- Stage 2: Compute tRoundA/tReplyA, send Final (stage=3) ----- */
     int32_t t_round_a = (int32_t)(rx_ts_resp - tx_ts_poll);
 
-    write_std_frame(3);
+    write_std_frame(3, seq_byte);
     do_tx_w4r();
 
     rc = wait_tx_done();
     if (rc < 0) {
         m->status = "TX_FINAL_ERR";
+        g_diag_seq++;
         return 0;
     }
     uint64_t tx_ts_final = read_tx_ts();
     int32_t t_reply_a = (int32_t)(tx_ts_final - rx_ts_resp);
     clear_status();
+    fire_cb(UWB_EVT_TX_FINAL, 0.0f, 0);
 
     /* ----- Stage 3: Wait for RTinfo (stage=4) ----- */
     rc = wait_rx_frame();
     if (rc < 0) {
-        m->status = (rc == -ETIMEDOUT) ? "RX_RTI_TIMEOUT" : "RX_RTI_ERR";
+        if (rc == -ETIMEDOUT) {
+            fire_cb(UWB_EVT_RX_RTINFO_TIMEOUT, 0.0f, 0);
+            m->status = "RX_RTI_TIMEOUT";
+        } else {
+            m->status = "RX_RTI_ERR";
+        }
         clear_status();
         do_rx_enable();
+        g_diag_seq++;
         return 0;
     }
+    fire_cb(UWB_EVT_RX_RTINFO_OK, 0.0f, 0);
     int32_t raw_clk_off = read_raw_clock_offset();
     clear_status();
 
@@ -849,23 +909,27 @@ static int initiator_step(struct uwb_measurement *m)
                                     raw_clk_off);
 
     if (range_m <= 0.0f || range_m > 200.0f) {
+        fire_cb(UWB_EVT_INVALID_RANGE, range_m, 0);
         m->status = "INVALID_RANGE";
         m->has_range = false;
         m->range_m   = range_m;
+        g_diag_seq++;
         return 0;
     }
 
+    fire_cb(UWB_EVT_RANGE_OK, range_m, 0);
     m->has_range = true;
     m->range_m   = range_m;
     m->status    = "OK";
 
-    /* Re-arm receiver for next poll cycle */
+    g_diag_seq++;
     do_rx_enable();
     return 0;
 }
 
 /* -----------------------------------------------------------------------
  * Responder: waits for Poll, sends Response, waits for Final, sends RTinfo
+ * Diagnostic callback fires at each stage; seq echoed from Poll SRC byte.
  * ----------------------------------------------------------------------- */
 static int responder_step(struct uwb_measurement *m)
 {
@@ -877,26 +941,35 @@ static int responder_step(struct uwb_measurement *m)
 
     /* ----- Stage 0: Listen for Poll (stage=1) ----- */
     do_rx_enable();
+    fire_cb(UWB_EVT_RX_ARMED, 0.0f, 0);
 
     rc = wait_rx_frame();
     if (rc < 0) {
+        fire_cb(UWB_EVT_RX_ERR, 0.0f, 0);
         m->status = (rc == -ETIMEDOUT) ? "LISTEN_TIMEOUT" : "POLL_RX_ERR";
         clear_status();
         return 0;
     }
     if (get_rx_stage() != 1) {
+        fire_cb(UWB_EVT_RX_ERR, 0.0f, 0);
         m->status = "BAD_STAGE_POLL";
         clear_status();
         return 0;
     }
+    g_rx_seq = get_rx_seq();
     uint64_t rx_ts_poll = read_rx_ts();
     clear_status();
+    fire_cb(UWB_EVT_RX_POLL, 0.0f, 0);
 
-    /* ----- Stage 1: Send Response (stage=2) ----- */
-    write_std_frame(2);
+    /* ----- Stage 1: Send Response (stage=2, echo seq in SRC byte) ----- */
+    fire_cb(UWB_EVT_TX_RESP_SCHEDULED, 0.0f, 0);
+    write_std_frame(2, g_rx_seq);
     do_tx_w4r();
 
+    uint32_t t0_resp     = k_uptime_get_32();
     rc = wait_tx_done();
+    uint32_t elapsed_ms  = k_uptime_get_32() - t0_resp;
+
     if (rc < 0) {
         m->status = "TX_RESP_ERR";
         return 0;
@@ -905,14 +978,26 @@ static int responder_step(struct uwb_measurement *m)
     int32_t t_reply_b = (int32_t)(tx_ts_resp - rx_ts_poll);
     clear_status();
 
+    if (elapsed_ms >= (uint32_t)CONFIG_VLOS_TX_RESP_LATE_MS) {
+        fire_cb(UWB_EVT_TX_RESP_LATE, 0.0f, elapsed_ms);
+    } else {
+        fire_cb(UWB_EVT_TX_RESP_DONE, 0.0f, 0);
+    }
+
     /* ----- Stage 2: Wait for Final (stage=3) ----- */
     rc = wait_rx_frame();
     if (rc < 0) {
+        if (rc == -ETIMEDOUT) {
+            fire_cb(UWB_EVT_RX_FINAL_TIMEOUT, 0.0f, 0);
+        } else {
+            fire_cb(UWB_EVT_RX_ERR, 0.0f, 0);
+        }
         m->status = (rc == -ETIMEDOUT) ? "RX_FINAL_TIMEOUT" : "RX_FINAL_ERR";
         clear_status();
         return 0;
     }
     if (get_rx_stage() != 3) {
+        fire_cb(UWB_EVT_RX_ERR, 0.0f, 0);
         m->status = "BAD_STAGE_FINAL";
         clear_status();
         return 0;
@@ -920,6 +1005,7 @@ static int responder_step(struct uwb_measurement *m)
     uint64_t rx_ts_final = read_rx_ts();
     int32_t t_round_b = (int32_t)(rx_ts_final - tx_ts_resp);
     clear_status();
+    fire_cb(UWB_EVT_RX_FINAL_OK, 0.0f, 0);
 
     /* ----- Stage 3: Send RTinfo (stage=4) with tRoundB + tReplyB ----- */
     write_rtinfo_frame(t_round_b, t_reply_b);
@@ -931,6 +1017,7 @@ static int responder_step(struct uwb_measurement *m)
         return 0;
     }
     clear_status();
+    fire_cb(UWB_EVT_TX_RTINFO_DONE, 0.0f, 0);
 
     m->has_range = false;
     m->range_m   = 0.0f;

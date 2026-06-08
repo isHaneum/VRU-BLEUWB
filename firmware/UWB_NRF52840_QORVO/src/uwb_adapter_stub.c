@@ -6,6 +6,12 @@
 
 static bool g_initiator_role;
 
+/* No-op: stub has no per-stage events to emit */
+void uwb_adapter_set_diag_cb(uwb_diag_cb_t cb)
+{
+    (void)cb;
+}
+
 int uwb_adapter_init(bool initiator_role)
 {
     g_initiator_role = initiator_role;

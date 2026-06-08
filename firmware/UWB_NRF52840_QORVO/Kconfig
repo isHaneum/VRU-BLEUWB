@@ -20,7 +20,7 @@ config VLOS_POLL_INTERVAL_MS
     range 20 2000
     default 100
     help
-      Main loop interval for placeholder ranging attempts or status output.
+      Main loop interval for ranging attempts or status output.
 
 config VLOS_DRIVER_STUB_LOG_PERIOD_MS
     int "Stub log period in milliseconds"
@@ -29,5 +29,89 @@ config VLOS_DRIVER_STUB_LOG_PERIOD_MS
     help
       When the Qorvo adapter is still a stub, limit how often placeholder
       status lines are emitted.
+
+# -----------------------------------------------------------------------
+# UWB profile
+# -----------------------------------------------------------------------
+
+config VLOS_UWB_PROFILE_ROBUST
+    bool "Use robust UWB profile (longer RX timeout)"
+    default y
+    help
+      When enabled the DW3000 RX timeout is extended to 60 ms, improving
+      reliability in obstructed or high-multipath environments.
+      When disabled a 30 ms timeout is used for faster cycling.
+
+# -----------------------------------------------------------------------
+# Recovery thresholds
+# -----------------------------------------------------------------------
+
+config VLOS_SOFT_RECOVERY_THRESHOLD
+    int "Soft recovery threshold (consecutive timeouts before RX_RESTART)"
+    range 1 50
+    default 5
+    help
+      How many consecutive timeouts trigger a soft RX_RESTART event.
+      The initiator will log RX_RESTART but continue without reinitialising
+      the DW3000 hardware.
+
+config VLOS_REINIT_THRESHOLD
+    int "Reinit threshold (consecutive timeouts before DW_REINIT)"
+    range 1 100
+    default 20
+    help
+      How many consecutive timeouts trigger a full DW_REINIT event.
+      The DW3000 is re-initialised via uwb_adapter_init().
+
+# -----------------------------------------------------------------------
+# Identity / heartbeat intervals
+# -----------------------------------------------------------------------
+
+config VLOS_IDENTITY_INTERVAL_MS
+    int "Identity heartbeat interval (ms)"
+    range 1000 60000
+    default 5000
+    help
+      How often the node re-emits its BOOT/IDENTITY CSV line so the
+      dashboard can classify firmware mode even after connecting late.
+
+config VLOS_HEARTBEAT_INTERVAL_MS
+    int "READY heartbeat interval for responder (ms)"
+    range 100 5000
+    default 1000
+    help
+      How often the responder emits a READY heartbeat line while waiting
+      for Poll frames.
+
+# -----------------------------------------------------------------------
+# Responder watchdog
+# -----------------------------------------------------------------------
+
+config VLOS_WATCHDOG_SOFT_MS
+    int "Responder watchdog soft restart interval (ms)"
+    range 500 30000
+    default 2000
+    help
+      If no Poll is received within this window, emit RX_RESTART.
+
+config VLOS_WATCHDOG_REINIT_MS
+    int "Responder watchdog reinit interval (ms)"
+    range 2000 60000
+    default 10000
+    help
+      If no Poll is received within this window, emit DW_REINIT and
+      call uwb_adapter_init() again.
+
+# -----------------------------------------------------------------------
+# Timing thresholds
+# -----------------------------------------------------------------------
+
+config VLOS_TX_RESP_LATE_MS
+    int "TX_RESP_LATE threshold in milliseconds"
+    range 2 50
+    default 8
+    help
+      Response TX calls taking longer than this value are classified as
+      TX_RESP_LATE instead of TX_RESP_DONE.
 
 endmenu
