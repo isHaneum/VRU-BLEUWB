@@ -162,29 +162,71 @@
   // =========================================================================
   // 3b. UWB DIAGNOSTIC STATE (raw firmware events)
   // =========================================================================
+  // Per-event firmware counters for the DWM3000 v1.4 diagnostic upgrade.
+  // Names match the on-air event vocabulary exactly so the dashboard table
+  // and the firmware emit identical labels.
+  function makeCounters(initial) {
+    var out = {};
+    for (var i = 0; i < initial.length; i++) out[initial[i]] = 0;
+    return out;
+  }
   var LiveDiag = {
     nodeA: {
       boot: false, configLine: "",
+      identity: { hardware: null, firmware: null, build: null },
       role: null,
       reinitCount: 0,
       consecutiveTimeout: 0,
       lastOkMs: null, lastTimeoutMs: null, lastSampleMs: null,
+      lastTxPollMs: null, lastRangeOkMs: null,
+      counters: makeCounters([
+        "TX_POLL", "RX_RESP_OK", "RX_RESP_TIMEOUT", "RX_RESP_ERR",
+        "TX_FINAL", "RX_RTINFO_OK", "RX_RTINFO_TIMEOUT",
+        "RANGE_OK", "RX_RESTART", "DW_REINIT",
+      ]),
     },
     nodeB: {
       boot: false, configLine: "",
+      identity: { hardware: null, firmware: null, build: null },
       role: null,
       reinitCount: 0,
       heartbeatSeen: false,
       lastReadyMs: null,
       lastPollMs: null,
       lastTxDoneMs: null,
+      lastTxLateMs: null,
       lastEventMs: null,
+      counters: makeCounters([
+        "READY", "RX_POLL",
+        "TX_RESP_SCHEDULED", "TX_RESP_DONE", "TX_RESP_LATE",
+        "RX_FINAL_OK", "RX_FINAL_TIMEOUT",
+        "TX_RTINFO_DONE", "RX_ERR", "RX_RESTART", "DW_REINIT",
+      ]),
     },
     // Event timeline for status chart and rate calc.
     // Each item: { ts: performance.now(), node: 'A'|'B', type: 'OK'|'TIMEOUT'|'ERR'|'RESTART'|'REINIT', label: string }
     events: [],
     eventsMax: 600,
+    // Per-event time-stamped list for windowed diagnosis rules.
+    eventLog: [],         // { ts, node:'A'|'B', event: string }
+    eventLogMax: 800,
   };
+
+  function pushEventLog(node, event) {
+    LiveDiag.eventLog.push({ ts: performance.now(), node: node, event: event });
+    if (LiveDiag.eventLog.length > LiveDiag.eventLogMax) LiveDiag.eventLog.shift();
+  }
+
+  function eventCountInWindow(node, event, ms) {
+    var cutoff = performance.now() - ms;
+    var n = 0;
+    for (var i = LiveDiag.eventLog.length - 1; i >= 0; i--) {
+      var e = LiveDiag.eventLog[i];
+      if (e.ts < cutoff) break;
+      if (e.node === node && e.event === event) n++;
+    }
+    return n;
+  }
 
   function pushDiagEvent(node, type, label) {
     LiveDiag.events.push({ ts: performance.now(), node: node, type: type, label: label || type });
@@ -518,7 +560,13 @@
 
     // BOOT / CONFIG / FATAL banners may omit the timestamp prefix per spec.
     if (p.length >= 3 && /^node_/i.test(p[0]) && p[1] === "BOOT") {
-      return { kind: "boot", node_id: p[0], role: p[2] };
+      // Extract optional identity k=v's: hardware, firmware, build
+      var bootMeta = {};
+      for (var bi = 3; bi < p.length; bi++) {
+        var bkv = p[bi].split("=");
+        if (bkv.length >= 2) bootMeta[bkv[0]] = bkv.slice(1).join("=");
+      }
+      return { kind: "boot", node_id: p[0], role: p[2], meta: bootMeta };
     }
     if (p.length >= 3 && /^node_/i.test(p[0]) && p[1] === "CONFIG") {
       return { kind: "config", node_id: p[0], config: p.slice(2).join(",") };
@@ -562,13 +610,19 @@
 
     // Event line: ts,node,EVENT[,k=v[,k=v...]]
     if (p.length >= 3 && /^node_/i.test(p[1])) {
-      var ev = { kind: "event", ts_ms: ts, node_id: p[1], event: p[2] };
+      var ev = { kind: "event", ts_ms: ts, node_id: p[1], event: p[2], meta: {} };
       var ex = p.slice(3);
       for (var j = 0; j < ex.length; j++) {
         var kv2 = ex[j].split("=");
         if (kv2.length === 2) {
-          if (kv2[0] === "reason") ev.reason = kv2[1];
-          if (kv2[0] === "count")  ev.count  = parseInt(kv2[1], 10);
+          var k = kv2[0], v = kv2[1];
+          ev.meta[k] = v;
+          if      (k === "reason")              ev.reason = v;
+          else if (k === "count")               ev.count = parseInt(v, 10);
+          else if (k === "seq")                 ev.seq = parseInt(v, 10);
+          else if (k === "consecutive_timeout") ev.consecutive_timeout = parseInt(v, 10);
+          else if (k === "range_m")             ev.range_m = parseFloat(v);
+          else if (k === "elapsed_ms")          ev.elapsed_ms = parseInt(v, 10);
         }
       }
       return ev;
@@ -587,6 +641,11 @@
     var key = nodeKeyOf(parsed.node_id);
     LiveDiag[key].boot = true;
     LiveDiag[key].role = parsed.role || null;
+    if (parsed.meta) {
+      LiveDiag[key].identity.hardware = parsed.meta.hardware || null;
+      LiveDiag[key].identity.firmware = parsed.meta.firmware || null;
+      LiveDiag[key].identity.build    = parsed.meta.build    || null;
+    }
     pushDiagEvent(key === "nodeA" ? "A" : "B", "RESTART", "BOOT");
   }
   function handleUwbConfig(parsed) {
@@ -598,11 +657,21 @@
   }
 
   // Per-firmware event vocabulary. Distinct from range CSV ingestion.
+  // The DWM3000 v1.4 firmware emits a richer vocabulary so the dashboard
+  // can correlate "node_A missed Response" with "node_B never RX'd Poll" vs
+  // "node_B RX'd Poll but TX_RESP failed" vs "node_B TX'd OK but node_A missed".
   function handleUwbEvent(parsed) {
     var now = performance.now();
     var key = nodeKeyOf(parsed.node_id);
     var slot = key === "nodeA" ? "A" : "B";
     LiveDiag[key].lastEventMs = now;
+
+    // Generic counter bump (only for known events; unknown ones are ignored).
+    if (LiveDiag[key].counters &&
+        Object.prototype.hasOwnProperty.call(LiveDiag[key].counters, parsed.event)) {
+      LiveDiag[key].counters[parsed.event]++;
+      pushEventLog(slot, parsed.event);
+    }
 
     switch (parsed.event) {
       case "READY":
@@ -610,19 +679,60 @@
         if (key === "nodeB") LiveDiag.nodeB.lastReadyMs = now;
         break;
       case "RX_ARMED":
-        // arming notice; no event tick (would spam the timeline)
         break;
+
+      // ----- node_A initiator vocabulary -----
+      case "TX_POLL":
+        if (key === "nodeA") LiveDiag.nodeA.lastTxPollMs = now;
+        break;
+      case "RX_RESP_OK":
+      case "TX_FINAL":
+      case "RX_RTINFO_OK":
+        break;
+      case "RX_RESP_TIMEOUT":
+      case "RX_RTINFO_TIMEOUT":
+        if (key === "nodeA") {
+          LiveDiag.nodeA.lastTimeoutMs = now;
+          if (typeof parsed.consecutive_timeout === "number") {
+            LiveDiag.nodeA.consecutiveTimeout = parsed.consecutive_timeout;
+          }
+        }
+        break;
+      case "RX_RESP_ERR":
+        // counted; nothing else
+        break;
+      case "RANGE_OK":
+        if (key === "nodeA") {
+          LiveDiag.nodeA.lastOkMs = now;
+          LiveDiag.nodeA.lastRangeOkMs = now;
+          LiveDiag.nodeA.consecutiveTimeout = 0;
+        }
+        break;
+
+      // ----- node_B responder vocabulary -----
       case "RX_POLL":
         if (key === "nodeB") LiveDiag.nodeB.lastPollMs = now;
         break;
       case "TX_RESP_SCHEDULED":
         break;
-      case "TX_DONE":
+      case "TX_RESP_DONE":
         if (key === "nodeB") LiveDiag.nodeB.lastTxDoneMs = now;
         break;
+      case "TX_RESP_LATE":
+        if (key === "nodeB") LiveDiag.nodeB.lastTxLateMs = now;
+        break;
+      case "RX_FINAL_OK":
+      case "RX_FINAL_TIMEOUT":
+      case "TX_RTINFO_DONE":
+        break;
+
+      // ----- shared -----
       case "RX_ERR":
-      case "RX_TIMEOUT":
+      case "RX_TIMEOUT":               // legacy responder name; still counted
         pushDiagEvent(slot, "ERR", parsed.event);
+        break;
+      case "TX_DONE":                  // legacy responder name -> map to RESP_DONE
+        if (key === "nodeB") LiveDiag.nodeB.lastTxDoneMs = now;
         break;
       case "RX_RESTART":
       case "RX_WATCHDOG_RESTART":
@@ -1608,13 +1718,69 @@
     set("uwb-last-valid-range", LiveUwb.lastValidRangeM != null ? LiveUwb.lastValidRangeM.toFixed(3) + " m" : "—");
     set("uwb-last-valid-age",   lastValidAge != null ? lastValidAge.toFixed(1) + " s" : "—");
 
-    // Diagnostic alert strings (spec text)
+    // ---- DWM3000 v1.4 per-event counters (cumulative since boot) ----
+    var ca = LiveDiag.nodeA.counters || {};
+    var cb = LiveDiag.nodeB.counters || {};
+    set("uwb-cnt-a-tx-poll",          String(ca.TX_POLL          || 0));
+    set("uwb-cnt-a-rx-resp-to",       String(ca.RX_RESP_TIMEOUT  || 0));
+    set("uwb-cnt-a-rx-rtinfo-to",     String(ca.RX_RTINFO_TIMEOUT|| 0));
+    set("uwb-cnt-a-range-ok",         String(ca.RANGE_OK         || 0));
+    set("uwb-cnt-a-rx-restart",       String(ca.RX_RESTART       || 0));
+    set("uwb-cnt-a-dw-reinit",        String(ca.DW_REINIT        || 0));
+    set("uwb-cnt-b-rx-poll",          String(cb.RX_POLL          || 0));
+    set("uwb-cnt-b-tx-resp-done",     String(cb.TX_RESP_DONE     || 0));
+    set("uwb-cnt-b-tx-resp-late",     String(cb.TX_RESP_LATE     || 0));
+    set("uwb-cnt-b-rx-final-ok",      String(cb.RX_FINAL_OK      || 0));
+    set("uwb-cnt-b-rx-final-to",      String(cb.RX_FINAL_TIMEOUT || 0));
+    set("uwb-cnt-b-tx-rtinfo-done",   String(cb.TX_RTINFO_DONE   || 0));
+
+    // ---- Identity (hardware/firmware/build) banners ----
+    function fmtIdent(node) {
+      var id = LiveDiag[node].identity || {};
+      var parts = [];
+      if (id.hardware) parts.push(id.hardware);
+      if (id.firmware) parts.push(id.firmware);
+      if (id.build)    parts.push("build " + id.build);
+      return parts.length ? parts.join(" · ") : "—";
+    }
+    set("uwb-ident-a", fmtIdent("nodeA"));
+    set("uwb-ident-b", fmtIdent("nodeB"));
+
+    // ---- Diagnostic alert strings (4-rule diagnosis per spec) ----
     var alerts = [];
     if (LiveUwb.connectedA && !hb) {
-      alerts.push("node_B serial port may be open, but responder heartbeat is not detected.");
+      alerts.push("node_B serial port may be open, but responder heartbeat (READY @1Hz) is not detected.");
     }
-    if (LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT) {
-      alerts.push("Serial connection is active, but the UWB responder is not replying. " +
+
+    var toA3      = eventCountInWindow("A", "RX_RESP_TIMEOUT",  3000) +
+                    eventCountInWindow("A", "RX_RTINFO_TIMEOUT", 3000);
+    var rxPollB3  = eventCountInWindow("B", "RX_POLL",          3000);
+    var txDoneB3  = eventCountInWindow("B", "TX_RESP_DONE",     3000);
+    var txLateB3  = eventCountInWindow("B", "TX_RESP_LATE",     3000);
+    var restartA10 = eventCountInWindow("A", "RX_RESTART", 10000);
+    var reinitA10  = eventCountInWindow("A", "DW_REINIT",  10000);
+
+    if (toA3 > 0 && rxPollB3 === 0) {
+      alerts.push("Diagnosis: node_A is timing out but node_B reports no RX_POLL in the last 3s. " +
+                  "Poll is not reaching the responder OR responder RX is not armed " +
+                  "(check antenna, channel/PAN, distance, obstruction, role assignment).");
+    } else if (toA3 > 0 && rxPollB3 > 0 && txDoneB3 === 0) {
+      var lateNote = txLateB3 > 0 ? " (" + txLateB3 + " TX_RESP_LATE events observed)" : "";
+      alerts.push("Diagnosis: responder receives Poll but fails to TX a clean Response" + lateNote +
+                  ". Likely delayed-TX margin / SPI stall on node_B.");
+    } else if (toA3 > 0 && txDoneB3 > 0) {
+      alerts.push("Diagnosis: responder transmitted Response (TX_RESP_DONE seen) but initiator missed it. " +
+                  "Check node_A RX timeout, RX timing window, antenna orientation, or RF interference.");
+    }
+
+    if (LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT &&
+        restartA10 === 0 && reinitA10 === 0) {
+      alerts.push("Recovery logic not firing: consecutive timeout is high but no RX_RESTART / DW_REINIT " +
+                  "was emitted in the last 10s. Verify SOFT_RECOVERY_THRESHOLD / DW_REINIT_THRESHOLD wiring.");
+    }
+    if (LiveDiag.nodeA.consecutiveTimeout >= UWB_TIMEOUT_BURST_ALERT &&
+        (restartA10 > 0 || reinitA10 > 0)) {
+      alerts.push("Serial connection is active, but the UWB responder is not replying despite recovery attempts. " +
                   "Check node_B responder firmware, role assignment, PAN/address/channel settings, " +
                   "timing, antenna placement, and recovery logic.");
     }

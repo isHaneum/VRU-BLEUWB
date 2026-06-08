@@ -281,6 +281,28 @@
                 <span><b id="uwb-to-rate-1s">0 to</b> / <b id="uwb-to-rate-3s">0 to</b> / <b id="uwb-to-rate-10s">0 to</b></span>
               </div>
             </div>
+
+            <div class="diag-section-title">DWM3000 v1.4 &mdash; node identity</div>
+            <div class="diag-grid">
+              <div class="diag-cell"><span class="kvk">node_A</span> <b id="uwb-ident-a">&mdash;</b></div>
+              <div class="diag-cell"><span class="kvk">node_B</span> <b id="uwb-ident-b">&mdash;</b></div>
+            </div>
+
+            <div class="diag-section-title">DWM3000 v1.4 &mdash; per-event counters (since boot)</div>
+            <div class="diag-grid">
+              <div class="diag-cell"><span class="kvk">A &middot; TX_POLL</span>          <b id="uwb-cnt-a-tx-poll">0</b></div>
+              <div class="diag-cell"><span class="kvk">A &middot; RANGE_OK</span>         <b id="uwb-cnt-a-range-ok">0</b></div>
+              <div class="diag-cell"><span class="kvk">A &middot; RX_RESP_TIMEOUT</span> <b id="uwb-cnt-a-rx-resp-to">0</b></div>
+              <div class="diag-cell"><span class="kvk">A &middot; RX_RTINFO_TIMEOUT</span> <b id="uwb-cnt-a-rx-rtinfo-to">0</b></div>
+              <div class="diag-cell"><span class="kvk">A &middot; RX_RESTART</span>      <b id="uwb-cnt-a-rx-restart">0</b></div>
+              <div class="diag-cell"><span class="kvk">A &middot; DW_REINIT</span>       <b id="uwb-cnt-a-dw-reinit">0</b></div>
+              <div class="diag-cell"><span class="kvk">B &middot; RX_POLL</span>         <b id="uwb-cnt-b-rx-poll">0</b></div>
+              <div class="diag-cell"><span class="kvk">B &middot; TX_RESP_DONE</span>    <b id="uwb-cnt-b-tx-resp-done">0</b></div>
+              <div class="diag-cell"><span class="kvk">B &middot; TX_RESP_LATE</span>    <b id="uwb-cnt-b-tx-resp-late">0</b></div>
+              <div class="diag-cell"><span class="kvk">B &middot; RX_FINAL_OK</span>     <b id="uwb-cnt-b-rx-final-ok">0</b></div>
+              <div class="diag-cell"><span class="kvk">B &middot; RX_FINAL_TIMEOUT</span> <b id="uwb-cnt-b-rx-final-to">0</b></div>
+              <div class="diag-cell"><span class="kvk">B &middot; TX_RTINFO_DONE</span>  <b id="uwb-cnt-b-tx-rtinfo-done">0</b></div>
+            </div>
             <div class="diag-config" id="uwb-config-line">&mdash;</div>
             <div class="diag-alerts" id="uwb-diag-alerts"></div>
           </div>

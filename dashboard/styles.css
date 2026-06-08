@@ -399,3 +399,8 @@ table.events tr.risk-UNCERTAIN td { color: var(--uncertain); }
 .diag-alerts .diag-ok {
   color: #00e08b; padding: 4px 0; font-size: 12px; letter-spacing: 1px;
 }
+.diag-section-title {
+  font-size: 11px; letter-spacing: 2px; color: var(--text-dim);
+  margin: 14px 0 8px 0; text-transform: uppercase;
+  border-top: 1px dashed #1a2330; padding-top: 10px;
+}
