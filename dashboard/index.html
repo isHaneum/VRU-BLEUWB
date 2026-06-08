@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -17,7 +17,7 @@
         <button class="tab active" data-mode="driver">Driver HMI</button>
         <button class="tab" data-mode="debug">Debug Monitor</button>
         <button class="tab" data-mode="fleet">Fleet Safety</button>
-        <button class="tab" data-mode="live-uwb">&#x1F4E1; Live UWB</button>
+        <button class="tab" data-mode="live-uwb">&#x1F4E1; Live Sensors</button>
       </nav>
       <div class="replay-controls">
         <label class="file-input">
@@ -44,7 +44,6 @@
       <!-- DRIVER HMI -->
       <section class="mode driver active" id="mode-driver">
         <div class="nav-shell" id="nav-shell" data-level="NONE">
-          <!-- Top maneuver banner (mimics nav app's next-turn card) -->
           <div class="nav-top">
             <div class="maneuver" id="maneuver-card">
               <div class="maneuver-icon" id="maneuver-icon">●</div>
@@ -57,12 +56,11 @@
             <div class="nav-status">
               <div class="status-pill" id="sensor-ble"><span class="dot"></span>BLE</div>
               <div class="status-pill" id="sensor-uwb"><span class="dot"></span>UWB</div>
-              <div class="status-pill on" id="sensor-replay"><span class="dot on"></span>Replay</div>
+              <div class="status-pill on" id="sensor-replay"><span class="dot on"></span>Live</div>
               <div class="status-pill zone-pill"><span class="ico">⚑</span><span id="zone-value">—</span></div>
             </div>
           </div>
 
-          <!-- Main map / road view -->
           <div class="nav-map">
             <canvas id="zone-canvas"></canvas>
             <div class="map-overlay-tl">
@@ -73,9 +71,14 @@
               <div class="worker-card" id="worker-card">
                 <div class="worker-title">Worker Tag</div>
                 <div class="worker-line"><span>ID</span><b id="worker-id">—</b></div>
-                <div class="worker-line"><span>Distance</span><b id="worker-distance">—</b></div>
-                <div class="worker-line"><span>Confidence</span><b id="worker-conf">—</b></div>
+                <div class="worker-line">
+                  <span>Distance</span>
+                  <b id="worker-distance">—</b>
+                </div>
+                <div class="worker-line micro"><span></span><b id="worker-distance-secondary" class="worker-distance-sec"></b></div>
+                <div class="worker-line"><span>BLE</span><b id="worker-ble-status">—</b></div>
                 <div class="worker-line micro"><span>RSSI</span><b id="worker-rssi">—</b></div>
+                <div class="worker-line"><span>Confidence</span><b id="worker-conf">—</b></div>
               </div>
             </div>
             <div class="map-legend">
@@ -85,7 +88,6 @@
             </div>
           </div>
 
-          <!-- Bottom HUD: speedometer + action bar -->
           <div class="nav-bottom">
             <div class="hud-speed">
               <div class="speed-num"><span id="speed-value">0</span><span class="speed-unit">km/h</span></div>
@@ -104,29 +106,53 @@
       <section class="mode debug" id="mode-debug">
         <div class="debug-grid">
           <div class="panel">
-            <div class="panel-title">BLE RSSI (dBm)</div>
+            <div class="panel-title">BLE LIVE</div>
+            <div class="ble-live-row">
+              <div class="ble-live-num"><span id="ble-cur-rssi">—</span></div>
+              <div class="ble-live-meta">
+                <div><span class="kvk">STATUS</span> <span id="ble-cur-status" class="ble-status-badge ble_none">BLE_NONE</span></div>
+                <div><span class="kvk">PACKETS</span> <b id="ble-cur-count">0</b></div>
+                <div><span class="kvk">LAST SEEN</span> <b id="ble-cur-age">—</b></div>
+              </div>
+            </div>
+            <canvas id="chart-ble-trend" width="900" height="140"></canvas>
+          </div>
+          <div class="panel">
+            <div class="panel-title">FUSION STATE</div>
+            <div class="fusion-row">
+              <div class="fusion-badge fusion-clear" id="fusion-state">CLEAR</div>
+              <div class="fusion-meta">
+                <div><span class="kvk">UWB QUALITY</span> <b id="fusion-uwb-quality">—</b></div>
+                <div><span class="kvk">LAST VALID</span> <b id="fusion-last-valid">—</b></div>
+                <div><span class="kvk">STALE</span> <span id="fusion-stale-flag" class="stale-flag">—</span></div>
+                <div><span class="kvk">FLAG</span> <span id="fusion-flag" class="fusion-flag">—</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">BLE RSSI (dBm) - replay/history</div>
             <canvas id="chart-ble" width="900" height="220"></canvas>
           </div>
           <div class="panel">
-            <div class="panel-title">UWB Range (m)</div>
+            <div class="panel-title">UWB Filtered Range (m)</div>
             <canvas id="chart-uwb" width="900" height="220"></canvas>
           </div>
-          <div class="panel">
+          <div class="panel wide">
             <div class="panel-title">UWB Status Timeline</div>
-            <canvas id="chart-status" width="900" height="80"></canvas>
+            <canvas id="chart-status" width="1400" height="80"></canvas>
           </div>
           <div class="panel">
-            <div class="panel-title">Current Sample</div>
+            <div class="panel-title">Current Fused Sample</div>
             <table class="kv" id="debug-current"></table>
           </div>
           <div class="panel wide">
-            <div class="panel-title">Recent Raw Events</div>
+            <div class="panel-title">Recent Fused Samples</div>
             <table class="events" id="debug-events">
               <thead>
                 <tr>
                   <th>t (s)</th><th>Vehicle</th><th>Spd</th><th>Brake</th>
-                  <th>Worker</th><th>Dist (m)</th><th>UWB</th><th>BLE</th>
-                  <th>RSSI</th><th>Conf</th><th>Zone</th><th>Cond</th>
+                  <th>Worker</th><th>Filt. Dist</th><th>UWB Q</th><th>BLE</th>
+                  <th>RSSI</th><th>Fusion</th><th>Zone</th><th>Risk</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -151,10 +177,14 @@
           <div class="kpi"><div class="kpi-label">Most Unreliable UWB Zone</div><div class="kpi-value small" id="kpi-unrel">—</div></div>
           <div class="kpi"><div class="kpi-label">Vehicles Monitored</div><div class="kpi-value" id="kpi-vehicles">0</div></div>
 
+          <div class="kpi uncertain"><div class="kpi-label">BLE Fallback Events</div><div class="kpi-value" id="kpi-ble-fallback">0</div></div>
+          <div class="kpi"><div class="kpi-label">Top UWB Dropout Zone</div><div class="kpi-value small" id="kpi-dropout-zone">—</div></div>
+          <div class="kpi"><div class="kpi-label">BLE-alive while UWB Lost</div><div class="kpi-value" id="kpi-fallback-dur">0.0 s</div></div>
+
           <div class="panel wide">
             <div class="panel-title">Zone-level Near-Miss Counts</div>
             <table class="events" id="zone-table">
-              <thead><tr><th>Zone</th><th>Total</th><th>Critical</th><th>Warning</th><th>Uncertain</th><th>UWB Timeouts</th></tr></thead>
+              <thead><tr><th>Zone</th><th>Total</th><th>Critical</th><th>Warning</th><th>Uncertain</th><th>UWB Timeouts</th><th>BLE Fallback</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>
@@ -182,44 +212,86 @@
           </div>
         </div>
       </section>
-      <!-- LIVE UWB -->
+
+      <!-- LIVE SENSORS (BLE + UWB) -->
       <section class="mode live-uwb" id="mode-live-uwb">
         <div class="live-grid">
           <div class="panel live-conn-panel">
             <div class="panel-title">SERIAL CONNECTIONS</div>
             <div class="serial-row">
-              <button class="ctrl" id="btn-connect-a">Connect node_A</button>
-              <span class="serial-status" id="status-a">&#x25CF; Disconnected</span>
-              <button class="ctrl" id="btn-disconnect-a" disabled>Disconnect</button>
+              <button class="ctrl" id="btn-connect-uwb-a">Connect node_A (UWB)</button>
+              <span class="serial-status" id="status-uwb-a">&#x25CF; Disconnected</span>
+              <button class="ctrl" id="btn-disconnect-uwb-a" disabled>Disconnect</button>
             </div>
             <div class="serial-row">
-              <button class="ctrl" id="btn-connect-b">Connect node_B</button>
-              <span class="serial-status" id="status-b">&#x25CF; Disconnected</span>
-              <button class="ctrl" id="btn-disconnect-b" disabled>Disconnect</button>
+              <button class="ctrl" id="btn-connect-uwb-b">Connect node_B (UWB)</button>
+              <span class="serial-status" id="status-uwb-b">&#x25CF; Disconnected</span>
+              <button class="ctrl" id="btn-disconnect-uwb-b" disabled>Disconnect</button>
             </div>
-            <div class="serial-note">Chrome / Edge required &middot; open via http:// &middot; select COM port per board when prompted.</div>
+            <div class="serial-row">
+              <button class="ctrl" id="btn-connect-ble">Connect BLE scanner</button>
+              <span class="serial-status" id="status-ble">&#x25CF; Disconnected</span>
+              <button class="ctrl" id="btn-disconnect-ble" disabled>Disconnect</button>
+            </div>
+            <div class="ble-filter-row">
+              <label>Filter name <input type="text" id="ble-filter-name" placeholder="e.g. VRU_BLE_01" /></label>
+              <label>Filter MAC  <input type="text" id="ble-filter-mac"  placeholder="aa:bb:cc:dd:ee:ff" /></label>
+            </div>
+            <div class="serial-note">Chrome / Edge required &middot; open via http:// &middot; select COM port for each board when prompted.</div>
             <button class="ctrl" id="btn-reset-live" style="margin-top:12px">Reset Stats</button>
           </div>
           <div class="panel live-range-panel">
-            <div class="panel-title">CURRENT RANGE</div>
+            <div class="panel-title">CURRENT UWB RANGE</div>
             <div class="live-range-display">
               <div class="live-range-num" id="live-range-num">--</div>
-              <div class="live-range-unit">meters</div>
+              <div class="live-range-unit">meters (filtered)</div>
             </div>
-            <div class="live-status-badge" id="live-status-badge">--</div>
+            <div class="live-badge-row">
+              <div class="live-status-badge" id="live-status-badge">--</div>
+              <div class="live-quality-badge q-lost" id="live-quality-badge">LOST</div>
+            </div>
             <div class="live-stats">
-              <div class="live-stat"><span>SAMPLES</span><b id="live-count">0</b></div>
+              <div class="live-stat"><span>OK SAMPLES</span><b id="live-count">0</b></div>
               <div class="live-stat"><span>MIN</span><b id="live-min">--</b></div>
               <div class="live-stat"><span>MAX</span><b id="live-max">--</b></div>
               <div class="live-stat"><span>AVG</span><b id="live-avg">--</b></div>
             </div>
           </div>
           <div class="panel wide">
-            <div class="panel-title">RANGE HISTORY &mdash; last 200 OK samples (node_A)</div>
+            <div class="panel-title">UWB RANGE HISTORY &mdash; last 200 OK samples (node_A)</div>
             <canvas id="chart-live-range" width="1400" height="260"></canvas>
           </div>
+
           <div class="panel wide">
-            <div class="panel-title">RAW SERIAL LOG</div>
+            <div class="panel-title">UWB LINK DIAGNOSTICS</div>
+            <div class="diag-grid">
+              <div class="diag-cell"><span class="kvk">LINK STATE</span>          <span id="uwb-link-state"          class="diag-badge link-no_data">NO_DATA</span></div>
+              <div class="diag-cell"><span class="kvk">RESPONDER HEARTBEAT</span> <span id="uwb-responder-heartbeat" class="diag-badge hb-no">NO</span></div>
+              <div class="diag-cell"><span class="kvk">SINCE node_B READY</span>  <b id="uwb-since-nodeB-ready">&mdash;</b></div>
+              <div class="diag-cell"><span class="kvk">SINCE LAST OK</span>       <b id="uwb-since-last-ok">&mdash;</b></div>
+              <div class="diag-cell"><span class="kvk">CONSECUTIVE TIMEOUT</span> <b id="uwb-consec-timeout">0</b></div>
+              <div class="diag-cell"><span class="kvk">REINIT node_A</span>       <b id="uwb-reinit-a">0</b></div>
+              <div class="diag-cell"><span class="kvk">REINIT node_B</span>       <b id="uwb-reinit-b">0</b></div>
+              <div class="diag-cell"><span class="kvk">LAST VALID RANGE</span>    <b id="uwb-last-valid-range">&mdash;</b></div>
+              <div class="diag-cell"><span class="kvk">LAST VALID AGE</span>      <b id="uwb-last-valid-age">&mdash;</b></div>
+              <div class="diag-cell"><span class="kvk">OK 1s / 3s / 10s</span>
+                <span><b id="uwb-ok-rate-1s">0 ok</b> / <b id="uwb-ok-rate-3s">0 ok</b> / <b id="uwb-ok-rate-10s">0 ok</b></span>
+              </div>
+              <div class="diag-cell"><span class="kvk">TO 1s / 3s / 10s</span>
+                <span><b id="uwb-to-rate-1s">0 to</b> / <b id="uwb-to-rate-3s">0 to</b> / <b id="uwb-to-rate-10s">0 to</b></span>
+              </div>
+            </div>
+            <div class="diag-config" id="uwb-config-line">&mdash;</div>
+            <div class="diag-alerts" id="uwb-diag-alerts"></div>
+          </div>
+
+          <div class="panel wide">
+            <div class="panel-title">UWB STATUS TIMELINE &mdash; last 30 s (node_A top, node_B bottom)</div>
+            <canvas id="chart-uwb-events" width="1400" height="120"></canvas>
+          </div>
+
+          <div class="panel wide">
+            <div class="panel-title">RAW SERIAL LOG (UWB + BLE)</div>
             <div class="log live-log" id="live-log"></div>
           </div>
         </div>

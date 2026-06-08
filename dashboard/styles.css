@@ -280,3 +280,122 @@ table.events tr.risk-UNCERTAIN td { color: var(--uncertain); }
 .log .ok  { color: #00c8ff; }
 .log .dim { color: #2a3a4a; }
 .log .err { color: #ff4c4c; }
+
+
+/* ===== BLE Live (Debug Monitor) ===== */
+.ble-live-row { display: flex; gap: 22px; align-items: center; margin-bottom: 10px; }
+.ble-live-num { font-size: 44px; font-weight: 800; color: #4fd1ff;
+  font-variant-numeric: tabular-nums; letter-spacing: -1px; min-width: 160px; }
+.ble-live-meta { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.ble-live-meta .kvk { color: var(--text-dim); font-size: 10px; letter-spacing: 2px; margin-right: 6px; }
+.ble-live-meta b { font-variant-numeric: tabular-nums; }
+.ble-status-badge {
+  display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+  background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38;
+}
+.ble-status-badge.ble_none   { color: #6a7a8a; }
+.ble-status-badge.ble_weak   { background: rgba(255,206,58,.1); color: #ffce3a; border-color: #ffce3a; }
+.ble-status-badge.ble_stable { background: rgba(79,209,255,.12); color: #4fd1ff; border-color: #4fd1ff; }
+.ble-status-badge.ble_near   { background: rgba(0,224,139,.15); color: #00e08b; border-color: #00e08b; }
+
+/* ===== Fusion State (Debug Monitor) ===== */
+.fusion-row { display: flex; gap: 22px; align-items: center; }
+.fusion-badge {
+  font-size: 18px; font-weight: 800; letter-spacing: 1.5px;
+  padding: 10px 18px; border-radius: 12px; min-width: 220px;
+  text-align: center; border: 2px solid #1f2a38;
+}
+.fusion-clear              { color: #6a7a8a; }
+.fusion-ble-candidate      { color: #ffce3a; border-color: #ffce3a; background: rgba(255,206,58,.06); }
+.fusion-uwb-tracked        { color: #00e08b; border-color: #00e08b; background: rgba(0,224,139,.08); }
+.fusion-uwb-unstable       { color: #ff8a2a; border-color: #ff8a2a; background: rgba(255,138,42,.08); }
+.fusion-uwb-lost-ble-alive { color: #8a7bff; border-color: #8a7bff; background: rgba(138,123,255,.10); }
+.fusion-meta { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.fusion-meta .kvk { color: var(--text-dim); font-size: 10px; letter-spacing: 2px; margin-right: 6px; }
+.stale-flag { font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38; font-weight: 700; }
+.stale-flag.on { background: rgba(255,138,42,.15); color: #ff8a2a; border-color: #ff8a2a; }
+.fusion-flag { font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38; font-weight: 700; }
+.fusion-flag.alarm { background: rgba(138,123,255,.20); color: #8a7bff; border-color: #8a7bff; }
+
+/* ===== Live Quality badge (Live UWB tab) ===== */
+.live-badge-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.live-quality-badge {
+  display: inline-block; padding: 3px 14px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+  background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38;
+}
+.live-quality-badge.q-good     { background: rgba(0,224,139,.12); color: #00e08b; border-color: #00e08b; }
+.live-quality-badge.q-unstable { background: rgba(255,138,42,.12); color: #ff8a2a; border-color: #ff8a2a; }
+.live-quality-badge.q-stale    { background: rgba(255,206,58,.12); color: #ffce3a; border-color: #ffce3a; }
+.live-quality-badge.q-lost     { background: rgba(255,76,76,.10); color: #ff4c4c; border-color: #ff4c4c; }
+
+/* ===== Worker Tag distance (Driver HMI) ===== */
+.worker-line b.live-ok   { color: #00e08b; }
+.worker-line b.live-warn { color: #ff8a2a; }
+.worker-line b.live-err  { color: #ff4c4c; }
+.worker-distance-sec { font-size: 11px; color: #8a96a8; font-weight: 500; }
+
+/* ===== BLE filter row ===== */
+.ble-filter-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.ble-filter-row label { font-size: 11px; color: var(--text-dim); display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 140px; }
+.ble-filter-row input {
+  padding: 5px 8px; background: #0c121b; border: 1px solid #1f2a38;
+  color: var(--text); border-radius: 6px; font-size: 12px; font-family: monospace;
+}
+
+/* ===== Sensor pill warn/err state (top bar) ===== */
+.status-pill.warn .dot { background: #ff8a2a; box-shadow: 0 0 8px #ff8a2a; }
+.status-pill.err  .dot { background: #ff4c4c; box-shadow: 0 0 8px #ff4c4c; }
+.status-pill.warn      { border-color: #ff8a2a; color: #ff8a2a; }
+.status-pill.err       { border-color: #ff4c4c; color: #ff4c4c; }
+
+/* ===== Raw serial log: BLE distinct color ===== */
+.log .ln.ble { color: #4fd1ff; }
+
+
+/* ===== UWB Diagnostic Panel (Live Sensors) ===== */
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 10px 22px;
+  margin-bottom: 12px;
+}
+.diag-cell {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 10px;
+  background: #0c121b;
+  border: 1px solid #1a2330;
+  border-radius: 8px;
+}
+.diag-cell .kvk { color: var(--text-dim); font-size: 10px; letter-spacing: 2px; }
+.diag-cell b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.diag-cell span > b { font-size: 12px; }
+.diag-badge {
+  display: inline-block;
+  padding: 2px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+  background: #141b25; color: #3a4a5a; border: 1px solid #1f2a38; width: max-content;
+}
+.diag-badge.link-ok       { background: rgba(0,224,139,.15);  color: #00e08b; border-color: #00e08b; }
+.diag-badge.link-timeout  { background: rgba(255,76,76,.15);  color: #ff4c4c; border-color: #ff4c4c; }
+.diag-badge.link-stale    { background: rgba(255,206,58,.12); color: #ffce3a; border-color: #ffce3a; }
+.diag-badge.link-lost     { background: rgba(255,76,76,.08);  color: #ff4c4c; border-color: #ff4c4c; }
+.diag-badge.link-no_data  { background: #141b25; color: #3a4a5a; border-color: #1f2a38; }
+.diag-badge.hb-yes        { background: rgba(0,224,139,.15);  color: #00e08b; border-color: #00e08b; }
+.diag-badge.hb-no         { background: rgba(255,76,76,.15);  color: #ff4c4c; border-color: #ff4c4c; }
+.diag-config {
+  font-family: monospace; font-size: 11px; color: #6a7a8a;
+  padding: 6px 10px; background: #0a0f17; border: 1px solid #1a2330; border-radius: 6px;
+  white-space: pre-wrap; word-break: break-all; margin-bottom: 10px;
+}
+.diag-alerts .diag-alert {
+  background: rgba(255,76,76,.10); color: #ff8a8a;
+  padding: 8px 12px; border-left: 3px solid #ff4c4c; border-radius: 4px;
+  margin-bottom: 6px; font-size: 13px; line-height: 1.5;
+}
+.diag-alerts .diag-ok {
+  color: #00e08b; padding: 4px 0; font-size: 12px; letter-spacing: 1px;
+}

@@ -96,6 +96,7 @@ class DW3000Class {
 		static void standardTX();
 		static void standardRX();
 		static void TXInstantRX();
+		static void forceIdle();
 
 		// DW3000 Firmware Interaction
 		static void softReset();

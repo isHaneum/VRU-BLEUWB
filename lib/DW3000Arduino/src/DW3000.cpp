@@ -1002,6 +1002,13 @@ void DW3000Class::TXInstantRX() {
     DW3000Class::writeFastCommand(0x0C);
 }
 
+/*
+ Forces the transceiver to idle (TXRXOFF). Useful for recovery after timeout bursts.
+*/
+void DW3000Class::forceIdle() {
+    DW3000Class::writeFastCommand(0x0);
+}
+
 
 
 /*
